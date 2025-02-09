@@ -43,6 +43,8 @@ userRouter.post('/', async (req, res) => {
             role: role._id // Assuming you want to store the role reference in the User model
         });
 
+        const savedUser = await user.save();
+
         // Add entries to GroupUser
         const groupUserEntries = groupIds.map(groupId => ({
             groupId,
@@ -55,7 +57,6 @@ userRouter.post('/', async (req, res) => {
         // await session.commitTransaction();
         // session.endSession();
         
-        const savedUser = await user.save();
         res.status(201).json(savedUser);
     } catch (error) {
         // await session.abortTransaction();
@@ -182,15 +183,7 @@ userRouter.put('/:id', async (req, res) => {
         // Find groups to add (new ones that don't exist)
         const groupsToAdd = newGroupIds.filter(gid => !existingGroupIds.includes(gid));
 
-        // ✅ FIXED: Find groups to remove (existing ones that are NOT in the new request)
         const groupsToRemove = existingGroupIds.filter(gid => !newGroupIds.includes(gid));
-
-        console.log("----------------------------")
-        console.log("Groups (RequestGroup): " + groups)
-        console.log("Groups (ExistingGroup): " + existingGroupIds)
-        console.log("Groups (NewGroupId): " + newGroupIds)
-        console.log("Groups (Add): " + groupsToAdd)
-        console.log("Groups (Remove): " + groupsToRemove)
 
         // Add new GroupUser entries
         if (groupsToAdd.length > 0) {
