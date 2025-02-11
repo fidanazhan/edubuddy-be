@@ -11,6 +11,7 @@ const permissionRoute = require('./routes/permissionRoute');
 const passport = require("passport");
 const passportRoute = require("./routes/passportRoute")
 const chatRoute = require('./routes/chatRoute')
+const fileRoute = require('./routes/fileRoute')
 const session = require("express-session");
 require("./middleware/passportMiddleware") 
 
@@ -48,6 +49,7 @@ app.use('/api/permission', permissionRoute)
 app.use('/api', passportRoute)
 app.use('/api/chat', chatRoute)
 app.use('/api/group', groupRoute)
+app.use('/api/file', fileRoute)
 
 // Start the server
 const PORT = process.env.PORT;
