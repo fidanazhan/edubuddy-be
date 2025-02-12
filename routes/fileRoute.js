@@ -22,35 +22,65 @@ const upload = multer({ storage });
 
 // Get files
 fileRouter.get("/", authMiddleware, async (req, res) => {
-
-    const tenantId = req.tenantId
-    const userEmail = req.user.email
-    const userRole = req.user.role
-
-    console.log("Tenant Id: " + tenantId)
-    console.log("User Email: " + userEmail)
-
-    try {
-
-      let user = null; 
-      let files = [];
-
-      if(userRole.toLowerCase() === "admin"){
-        files = await File.find({ tenantId: tenantId}); 
-      }else{
-         user = await User.find({ email: userEmail});
-         files = await File.find({ tenantId: tenantId, uploadedBy: user}); 
+  try {
+      if (!req.tenantId) {
+          return res.status(404).json({ error: "Please include tenant on header" });
       }
 
-      res.status(200).json(files);
-    } catch (error) {
+      const tenantId = req.tenantId;
+      const userEmail = req.user.email;
+      const userRole = req.user.role;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const skip = (page - 1) * limit;
+      const searchQuery = req.query.search || "";
+
+      let searchConditions = { tenantId };
+
+      if (searchQuery) {
+          searchConditions.$or = [
+              { originalName: { $regex: searchQuery, $options: "i" } },
+              // { uplaodedBy: { $regex: searchQuery, $options: "i" } }
+          ];
+      }
+
+      let files;
+
+      if (userRole.toLowerCase() !== "admin") {
+          const user = await User.findOne({ email: userEmail });
+          searchConditions.uploadedBy = user._id;
+
+          files = await File.find(searchConditions, 'originalName url type size tag uploadedBy')
+              .skip(skip)
+              .limit(limit);
+      } else {
+          files = await File.find(searchConditions, 'originalName url type size tag')
+              .populate('uploadedBy', 'name profilePictureUrl')
+              .skip(skip)
+              .limit(limit);
+      }
+
+      const total = await File.countDocuments(searchConditions);
+
+      res.json({
+          total,
+          page,
+          pages: Math.ceil(total / limit),
+          limit,
+          data: files,
+      });
+  } catch (error) {
       res.status(500).json({ message: "Failed to fetch files", error: error.message });
-    }
-  });
+  }
+});
+
 
 // Upload file
 fileRouter.post("/upload", authMiddleware, upload.array("files", 5), async (req, res) => {
+
   const userId = req.user.id;
+  const userEmail = req.user.email;  
+  const tenantId = req.tenantId;
 
   try {
     if (!req.files || req.files.length === 0) {
@@ -63,9 +93,11 @@ fileRouter.post("/upload", authMiddleware, upload.array("files", 5), async (req,
     const uploadedFiles = await Promise.all(
       req.files.map(async (file) => {
         const uniqueFileName = `${Date.now()}-${file.originalname}`;
+        const filePath = `${tenantId}/${userEmail}/${uniqueFileName}`;
+
         const uploadParams = {
           Bucket: process.env.DO_SPACES_BUCKET,
-          Key: uniqueFileName,
+          Key: filePath,
           Body: file.buffer,
           ContentType: file.mimetype,
           ACL: "public-read",
@@ -75,7 +107,7 @@ fileRouter.post("/upload", authMiddleware, upload.array("files", 5), async (req,
 
         return {
           originalName: file.originalname,
-          storedName: uniqueFileName,
+          storedName: filePath,
           tag: tag, // Assign the single tag to all files
           url: `${process.env.DO_SPACES_ENDPOINT}/${process.env.DO_SPACES_BUCKET}/${uniqueFileName}`,
           type: file.mimetype,
@@ -116,5 +148,46 @@ fileRouter.delete("/delete/:id", async (req, res) => {
     res.status(500).json({ message: "Delete failed", error: error.message });
   }
 });
+
+fileRouter.post("/delete-multiple", authMiddleware, async (req, res) => {
+
+  console.log("fileIds: " + JSON.stringify(req.body))
+  console.log("fileIds: " + req.body)
+
+  try {
+    const { fileIds } = req.body;
+
+    if (!fileIds || !Array.isArray(fileIds) || fileIds.length === 0) {
+      return res.status(400).json({ message: "Invalid file IDs" });
+    }
+
+    // Find all files to delete
+    const filesToDelete = await File.find({ _id: { $in: fileIds } });
+
+    if (!filesToDelete.length) {
+      return res.status(404).json({ message: "Files not found" });
+    }
+
+    // Delete files from DigitalOcean Spaces
+    const deletePromises = filesToDelete.map((file) => {
+      const deleteParams = {
+        Bucket: process.env.DO_SPACES_BUCKET,
+        Key: file.storedName,
+      };
+      return s3.send(new DeleteObjectCommand(deleteParams));
+    });
+
+    await Promise.all(deletePromises);
+
+    // Delete files from database
+    await File.deleteMany({ _id: { $in: fileIds } });
+
+    res.json({ message: "Files deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting files:", error);
+    res.status(500).json({ message: "Failed to delete files", error: error.message });
+  }
+});
+
 
 module.exports = fileRouter;

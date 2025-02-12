@@ -69,6 +69,10 @@ authRoute.get(
     }),
     async (req, res) => {
         try {
+
+
+            console.log("Req User: " + JSON.stringify(req.user))
+
             const userEmail = req.user.email;
             const user = await User.findOne({ email: userEmail })
                 .populate({
@@ -87,6 +91,7 @@ authRoute.get(
                 const refreshToken = generateRefreshToken(user);
 
                 user.refreshToken = refreshToken;
+                user.profilePictureUrl = req.user.photo
                 await user.save();
 
                 const clientURL = `${process.env.HYPERTEXT_TRANSFER_PROTOCOL}${subdomain}.${process.env.CLIENT_URL}/login`;

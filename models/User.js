@@ -13,6 +13,10 @@ const userSchema = new mongoose.Schema({
   refreshToken: { type: String },
   status: {type: Number}, // 0 - Not Active, 1 - Active, 2 - Suspend
   profilePictureUrl: {type: String},
+  totalStorage: {type: Number},
+  usedStorage: {type: Number},
+  GoogleAccessToken: {type: String},
+  GoogleRefreshToken: {type: String},
   groups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Group' }],
 });
 

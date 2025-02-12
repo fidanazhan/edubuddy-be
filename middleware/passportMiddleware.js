@@ -13,7 +13,7 @@ passport.use(
     (accessToken, refreshToken, profile, done) => {
       
       // Here, you process the user profile data
-      const user = {
+      const dataFromGoogle = {
         id: profile.id,
         displayName: profile.displayName,
         email: profile.emails[0].value,
@@ -21,21 +21,9 @@ passport.use(
       };
 
       // Pass the user data to Passport's `done` function
-      return done(null, user);
+      return done(null, dataFromGoogle);
 
       //return done(null, profile);
     }
   )
 );
-
-// // Serialize user to the session
-// passport.serializeUser((user, done) => {
-
-//   // console.log("User Passport : " + user)
-//   done(null, user);
-// });
-
-// // Deserialize user from the session
-// passport.deserializeUser((user, done) => {
-//   done(null, user);
-// });
