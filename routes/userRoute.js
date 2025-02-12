@@ -6,6 +6,10 @@ const Role = require('../models/Role')
 const Group = require('../models/Group')
 const GroupUser = require('../models/GroupUser')
 const mongoose = require("mongoose");
+const multer = require("multer");
+const ExcelJS = require("exceljs");
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Create User
 userRouter.post('/', async (req, res) => {
@@ -227,5 +231,96 @@ userRouter.delete('/:id', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+// Bulk Upload By Excel
+userRouter.post("/bulk-upload", upload.single("file"), async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+  
+    const tenantId = req.tenantId; // Assuming tenantId is passed in headers
+    if (!tenantId) {
+        console.log("1")
+      return res.status(400).json({ error: "Please include tenant in the header" });
+    }
+  
+    try {
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(req.file.buffer);
+      const worksheet = workbook.worksheets[0]; // First sheet
+  
+      if (!worksheet) {
+        console.log("2")
+
+        return res.status(400).json({ message: "No sheets found in the Excel file" });
+      }
+  
+      // Extract headers
+      const headers = worksheet.getRow(1).values.slice(1); // Skip empty first index
+  
+      // Validate expected headers
+      const expectedHeaders = ["Name", "Email", "Status", "Role"];
+      const missingHeaders = expectedHeaders.filter(h => !headers.includes(h));
+      if (missingHeaders.length > 0) {
+        console.log("3")
+
+        return res.status(400).json({ error: `Missing columns: ${missingHeaders.join(", ")}` });
+      }
+  
+      // Extract user data
+      const usersToInsert = [];
+  
+      for (let i = 2; i <= worksheet.rowCount; i++) {
+        const row = worksheet.getRow(i);
+        const name = row.getCell(headers.indexOf("Name") + 1).value;
+        const email = row.getCell(headers.indexOf("Email") + 1).value;
+        const rawStatus = row.getCell(headers.indexOf("Status") + 1).value || "Not Active";
+        const roleCode = row.getCell(headers.indexOf("Role") + 1).value;
+  
+        // Validate required fields
+        if (!name || !email || !roleCode) {
+            console.log("4")
+
+          return res.status(400).json({ error: `Row ${i}: Missing required fields` });
+        }
+  
+        // Validate role
+        const role = await Role.findOne({ code: roleCode.toUpperCase(), tenantId });
+        if (!role) {
+            console.log("5")
+
+          return res.status(400).json({ error: `Row ${i}: Role '${roleCode}' not found for this tenant` });
+        }
+
+        let status;
+        if (rawStatus === "Active") {
+            status = 1;
+        } else if (rawStatus === "Not Active") {
+            status = 0;
+        } else {
+            return res.status(400).json({ error: `Row ${i}: Status '${rawStatus}'. Invalid Status value. Use 'Active' or 'Not Active'.` });
+        }
+  
+        // Prepare user data
+        usersToInsert.push({
+          name,
+          email,
+          status,
+          role: role._id,
+          tenantId
+        });
+      }
+  
+      // Save users in batch
+      const savedUsers = await User.insertMany(usersToInsert);
+  
+      res.status(201).json({ message: "Users uploaded successfully", users: savedUsers });
+    } catch (error) {
+      console.error("Error processing Excel file:", error);
+      console.log("6")
+
+      res.status(500).json({ error: "Error processing file" });
+    }
+  });
 
 module.exports = userRouter;
