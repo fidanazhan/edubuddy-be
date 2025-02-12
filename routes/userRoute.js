@@ -240,7 +240,6 @@ userRouter.post("/bulk-upload", upload.single("file"), async (req, res) => {
   
     const tenantId = req.tenantId; // Assuming tenantId is passed in headers
     if (!tenantId) {
-        console.log("1")
       return res.status(400).json({ error: "Please include tenant in the header" });
     }
   
@@ -250,8 +249,6 @@ userRouter.post("/bulk-upload", upload.single("file"), async (req, res) => {
       const worksheet = workbook.worksheets[0]; // First sheet
   
       if (!worksheet) {
-        console.log("2")
-
         return res.status(400).json({ message: "No sheets found in the Excel file" });
       }
   
@@ -262,8 +259,6 @@ userRouter.post("/bulk-upload", upload.single("file"), async (req, res) => {
       const expectedHeaders = ["Name", "Email", "Status", "Role"];
       const missingHeaders = expectedHeaders.filter(h => !headers.includes(h));
       if (missingHeaders.length > 0) {
-        console.log("3")
-
         return res.status(400).json({ error: `Missing columns: ${missingHeaders.join(", ")}` });
       }
   
@@ -279,16 +274,12 @@ userRouter.post("/bulk-upload", upload.single("file"), async (req, res) => {
   
         // Validate required fields
         if (!name || !email || !roleCode) {
-            console.log("4")
-
           return res.status(400).json({ error: `Row ${i}: Missing required fields` });
         }
   
         // Validate role
         const role = await Role.findOne({ code: roleCode.toUpperCase(), tenantId });
         if (!role) {
-            console.log("5")
-
           return res.status(400).json({ error: `Row ${i}: Role '${roleCode}' not found for this tenant` });
         }
 
@@ -317,8 +308,6 @@ userRouter.post("/bulk-upload", upload.single("file"), async (req, res) => {
       res.status(201).json({ message: "Users uploaded successfully", users: savedUsers });
     } catch (error) {
       console.error("Error processing Excel file:", error);
-      console.log("6")
-
       res.status(500).json({ error: "Error processing file" });
     }
   });
