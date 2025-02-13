@@ -14,16 +14,16 @@ userRouter.post('/', async (req, res) => {
 
     // const session = await mongoose.startSession();
     // session.startTransaction();
-    
+
     try {
 
         const tenantId = req.tenantId
-        if(!tenantId){
+        if (!tenantId) {
             return res.status(404).json({ error: 'Please include tenant on header' });
         }
 
         // Search for the role by name and tenantId
-        const role = await Role.findOne({ code: req.body.role.toUpperCase(), tenantId: tenantId });        
+        const role = await Role.findOne({ code: req.body.role.toUpperCase(), tenantId: tenantId });
         if (!role) {
             return res.status(400).json({ error: 'Role not found for this tenant' });
         }
@@ -34,7 +34,7 @@ userRouter.post('/', async (req, res) => {
         }
 
         const groupIds = groupsDB.map(g => g._id);
-        
+
         // Create the user with the role
         const user = new User({
             ...req.body,
@@ -56,7 +56,7 @@ userRouter.post('/', async (req, res) => {
 
         // await session.commitTransaction();
         // session.endSession();
-        
+
         res.status(201).json(savedUser);
     } catch (error) {
         // await session.abortTransaction();
@@ -86,7 +86,7 @@ userRouter.post('/', async (req, res) => {
 userRouter.get('/', async (req, res) => {
     try {
 
-        if(!req.tenantId){
+        if (!req.tenantId) {
             return res.status(404).json({ error: 'Please include tenant on header' });
         }
 
@@ -101,7 +101,7 @@ userRouter.get('/', async (req, res) => {
             tenantId,
             $or: [
                 { name: { $regex: searchQuery, $options: 'i' } },
-                { email: { $regex: searchQuery, $options: 'i' } } 
+                { email: { $regex: searchQuery, $options: 'i' } }
             ]
         };
 
@@ -125,6 +125,49 @@ userRouter.get('/', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+// // Get All Users From Specific Tenant
+// userRouter.get('/token', async (req, res) => {
+//     try {
+
+//         if (!req.tenantId) {
+//             return res.status(404).json({ error: 'Please include tenant on header' });
+//         }
+
+//         const page = parseInt(req.query.page) || 1; // Default page 1
+//         const limit = parseInt(req.query.limit) || 10; // Default 10 data per page
+//         const skip = (page - 1) * limit;
+
+//         const searchQuery = req.query.search || '';
+//         const tenantId = req.tenantId;
+
+//         const searchConditions = {
+//             tenantId,
+//             $or: [
+//                 { name: { $regex: searchQuery, $options: 'i' } },
+//                 { email: { $regex: searchQuery, $options: 'i' } }
+//             ]
+//         };
+
+//         // Fetch paginated users with search conditions
+//         const users = await User.find(searchConditions, '-tenantId -createdAt -modifiedAt')
+//             .populate('role', 'name code permissions -_id')
+//             .skip(skip)
+//             .limit(limit);
+
+//         const total = await User.countDocuments(searchConditions);
+
+//         res.json({
+//             total,
+//             page,
+//             pages: Math.ceil(total / limit),
+//             limit,
+//             data: users,
+//         });
+//     } catch (error) {
+//         res.status(500).json({ error: error.message });
+//     }
+// });
 
 
 
@@ -150,14 +193,14 @@ userRouter.put('/:id', async (req, res) => {
     // session.startTransaction();
 
     try {
-     
+
         const tenantId = req.tenantId
         const userId = req.params.id;
 
-        if(!tenantId){
+        if (!tenantId) {
             return res.status(404).json({ error: 'Please include tenant on header' });
         }
-        
+
         const role = await Role.findOne({ code: req.body.role.toUpperCase(), tenantId: tenantId });
         if (!role) {
             return res.status(400).json({ error: 'Role not found for this tenant' });
