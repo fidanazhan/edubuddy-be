@@ -1,7 +1,8 @@
 const express = require('express');
 const transactionRouter = express.Router();
 const Transaction = require('../models/Transaction');
-
+const User = require('../models/User');
+const tenantIdentifier = require("../middleware/tenantIdentifier")
 const mongoose = require("mongoose");
 
 // Create Transaction
@@ -47,7 +48,8 @@ transactionRouter.post('/', async (req, res) => {
 });
 
 // Get All Transactions From Specific Tenant
-transactionRouter.get('/', async (req, res) => {
+transactionRouter.get('/', tenantIdentifier, async (req, res) => {
+    // console.log("Retrieving Transactions")
     try {
 
         if (!req.tenantId) {
@@ -57,20 +59,36 @@ transactionRouter.get('/', async (req, res) => {
         const page = parseInt(req.query.page) || 1; // Default page 1
         const limit = parseInt(req.query.limit) || 10; // Default 5 data per page
         const skip = (page - 1) * limit;
-        console.log(page, limit, skip)
+        // console.log(page, limit, skip)
         const searchSenderQuery = req.query.searchSender || '';
         const searchReceiverQuery = req.query.searchReceiver || '';
         const tenantId = req.tenantId;
-        console.log(searchSenderQuery)
-        console.log(searchReceiverQuery)
+        // console.log(tenantId)
+        // console.log(searchSenderQuery)
+        // console.log(searchReceiverQuery)
+        // const searchConditions = {
+        //     tenantId,
+        //     $and: [
+        //         { 'sender.senderName': { $regex: searchSenderQuery, $options: 'i' } },
+        //         { 'receiver.receiverName': { $regex: searchReceiverQuery, $options: 'i' } }
+        //     ]
+        // };
+        // console.log("Fetching Transaction")
+        // // Fetch paginated users with search conditions
+        // const transactions = await Transaction.find(searchConditions, '-tenantId')
+        //     .populate('sender', 'name')
+        //     .populate('receiver', 'name')
+        //     .skip(skip)
+        //     .limit(limit);
+
         const searchConditions = {
             tenantId,
-            $or: [
-                { sender: { $regex: searchSenderQuery, $options: 'i' } },
-                { receiver: { $regex: searchReceiverQuery, $options: 'i' } }
+            $and: [
+                { 'sender.senderName': { $regex: searchSenderQuery, $options: 'i' } },
+                { 'receiver.receiverName': { $regex: searchReceiverQuery, $options: 'i' } }
             ]
         };
-
+        // console.log("Fetching Transaction")
         // Fetch paginated users with search conditions
         const transactions = await Transaction.find(searchConditions, '-tenantId')
             .populate('sender', 'name')
@@ -79,7 +97,7 @@ transactionRouter.get('/', async (req, res) => {
             .limit(limit);
 
         const total = await Transaction.countDocuments(searchConditions);
-
+        // console.log("Sending Transactions")
         res.json({
             total,
             page,
@@ -87,6 +105,25 @@ transactionRouter.get('/', async (req, res) => {
             limit,
             data: transactions,
         });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get All Transactions From Specific Tenant
+transactionRouter.get('/getUsers', tenantIdentifier, async (req, res) => {
+    // console.log("Retrievint Sender Receiver")
+    try {
+
+        if (!req.tenantId) {
+            return res.status(404).json({ error: 'Please include tenant on header' });
+        }
+        const tenantId = req.tenantId;
+        const users = await User.find(
+            { tenantId },
+            { "name": 1, "email": 1 });
+        // console.log("Sending User", users)
+        res.status(200).json(users);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

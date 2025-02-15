@@ -5,7 +5,7 @@ const modelConfigRoute = express.Router();
 // Create a new model Config
 modelConfigRoute.post('/model', async (req, res) => {
     try {
-        const newModelConfig = new modelConfig();
+        const newModelConfig = new ModelConfig();
         const savedModelConfig = await newModelConfig.save();
         res.status(201).json(savedModelConfig);
     } catch (err) {
