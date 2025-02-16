@@ -11,17 +11,19 @@ const userSchema = new mongoose.Schema({
   modifiedBy: { type: String },
   role: { type: mongoose.Schema.Types.ObjectId, ref: 'Role' },
   refreshToken: { type: String },
-  status: {type: Number}, // 0 - Not Active, 1 - Active, 2 - Suspend
-  profilePictureUrl: {type: String},
+  status: { type: Number }, // 0 - Not Active, 1 - Active, 2 - Suspend
+  profilePictureUrl: { type: String },
   totalStorage: {type: Number},
   usedStorage: {type: Number},
   GoogleAccessToken: {type: String},
   GoogleRefreshToken: {type: String},
   groups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Group' }],
+  totalToken: { type: Number, default: 0 },
+  usedToken: { type: Number, default: 0 },
 });
 
 // Create indexes
-userSchema.index({ tenantId: 1 }); 
+userSchema.index({ tenantId: 1 });
 userSchema.index({ role: 1 });
 
 // Export the User model
