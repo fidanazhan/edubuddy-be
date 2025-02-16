@@ -232,8 +232,8 @@ userRouter.delete('/:id', async (req, res) => {
     }
 });
 
-// Bulk Upload By Excel
-userRouter.post("/bulk-upload", upload.single("file"), async (req, res) => {
+// Bulk Add Upload By Excel
+userRouter.post("/bulk-add", upload.single("file"), async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded" });
     }
@@ -311,5 +311,99 @@ userRouter.post("/bulk-upload", upload.single("file"), async (req, res) => {
       res.status(500).json({ error: "Error processing file" });
     }
   });
+
+userRouter.post("/bulk-update", upload.single("file"), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: "No file uploaded" });
+  }
+
+  const tenantId = req.tenantId; // Assuming tenantId is passed in headers
+  if (!tenantId) {
+    return res.status(400).json({ error: "Please include tenant in the header" });
+  }
+
+  try {
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(req.file.buffer);
+    const worksheet = workbook.worksheets[0]; // First sheet
+
+    if (!worksheet) {
+      return res.status(400).json({ message: "No sheets found in the Excel file" });
+    }
+
+    // Extract headers
+    const headers = worksheet.getRow(1).values.slice(1); // Skip empty first index
+
+    // Expected headers for bulk update
+    const expectedHeaders = ["Name", "Email", "Status", "Role", "IC Number", "Start Date", "End Date"];
+    const missingHeaders = expectedHeaders.filter(h => !headers.includes(h));
+    if (missingHeaders.length > 0) {
+      return res.status(400).json({ error: `Missing columns: ${missingHeaders.join(", ")}` });
+    }
+
+    // Process user updates
+    const updatePromises = [];
+
+    for (let i = 2; i <= worksheet.rowCount; i++) {
+      const row = worksheet.getRow(i);
+      const icNumber = row.getCell(headers.indexOf("IC Number") + 1).value;
+      const name = row.getCell(headers.indexOf("Name") + 1).value;
+      const email = row.getCell(headers.indexOf("Email") + 1).value;
+      const rawStatus = row.getCell(headers.indexOf("Status") + 1).value || "Not Active";
+      const roleCode = row.getCell(headers.indexOf("Role") + 1).value;
+      const startDate = row.getCell(headers.indexOf("Start Date") + 1).value;
+      const endDate = row.getCell(headers.indexOf("End Date") + 1).value;
+
+      // Validate required fields
+      if (!icNumber) {
+        return res.status(400).json({ error: `Row ${i}: Missing IC Number (required for update)` });
+      }
+
+      // Validate role
+      const role = await Role.findOne({ code: roleCode.toUpperCase(), tenantId });
+      if (!role) {
+        return res.status(400).json({ error: `Row ${i}: Role '${roleCode}' not found for this tenant` });
+      }
+
+      let status;
+      if (rawStatus === "Active") {
+        status = 1;
+      } else if (rawStatus === "Not Active") {
+        status = 0;
+      } else {
+        return res.status(400).json({ error: `Row ${i}: Status '${rawStatus}' is invalid. Use 'Active' or 'Not Active'.` });
+      }
+
+      // Find user by Email
+      const user = await User.findOne({ email: email.toLowerCase(), tenantId });
+      if (!user) {
+        return res.status(400).json({ error: `Row ${i}: No user found with email '${email}'` });
+      }
+
+      // Prepare update object
+      const updateData = {
+        name,
+        email,
+        status,
+        ICNumber: icNumber,
+        role: role._id,
+        startDate: startDate ? new Date(startDate) : null,
+        endDate: endDate ? new Date(endDate) : null
+      };
+
+      // Push update promise
+      updatePromises.push(User.updateOne({ _id: user._id }, { $set: updateData }));
+    }
+
+    // Execute all updates in parallel
+    await Promise.all(updatePromises);
+
+    res.status(200).json({ message: "Users updated successfully" });
+  } catch (error) {
+    console.error("Error processing Excel file:", error);
+    res.status(500).json({ error: "Error processing file" });
+  }
+});
+  
 
 module.exports = userRouter;

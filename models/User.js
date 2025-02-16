@@ -11,6 +11,7 @@ const userSchema = new mongoose.Schema({
   modifiedBy: { type: String },
   role: { type: mongoose.Schema.Types.ObjectId, ref: 'Role' },
   refreshToken: { type: String },
+  ICNumber: {type: Number },
   status: {type: Number}, // 0 - Not Active, 1 - Active, 2 - Suspend
   profilePictureUrl: {type: String},
   totalStorage: {type: Number},

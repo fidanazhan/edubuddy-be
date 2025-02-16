@@ -151,9 +151,6 @@ fileRouter.delete("/delete/:id", async (req, res) => {
 
 fileRouter.post("/delete-multiple", authMiddleware, async (req, res) => {
 
-  console.log("fileIds: " + JSON.stringify(req.body))
-  console.log("fileIds: " + req.body)
-
   try {
     const { fileIds } = req.body;
 
