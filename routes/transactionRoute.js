@@ -2,7 +2,6 @@ const express = require('express');
 const transactionRouter = express.Router();
 const Transaction = require('../models/Transaction');
 const User = require('../models/User');
-const tenantIdentifier = require("../middleware/tenantIdentifier")
 const mongoose = require("mongoose");
 
 // Create Transaction
@@ -48,7 +47,7 @@ transactionRouter.post('/', async (req, res) => {
 });
 
 // Get All Transactions From Specific Tenant
-transactionRouter.get('/', tenantIdentifier, async (req, res) => {
+transactionRouter.get('/', async (req, res) => {
     // console.log("Retrieving Transactions")
     try {
 
@@ -111,7 +110,7 @@ transactionRouter.get('/', tenantIdentifier, async (req, res) => {
 });
 
 // Get All Transactions From Specific Tenant
-transactionRouter.get('/getUsers', tenantIdentifier, async (req, res) => {
+transactionRouter.get('/getUsers', async (req, res) => {
     // console.log("Retrievint Sender Receiver")
     try {
 

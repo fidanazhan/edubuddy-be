@@ -15,6 +15,9 @@ const fileRoute = require('./routes/fileRoute')
 const configRoute = require('./routes/configRoute')
 const modelConfigRoute = require('./routes/modelConfigRoute')
 const transactionRoute = require('./routes/transactionRoute')
+const requestRoute = require('./routes/requestRoute')
+const storageRequestRoute = require('./routes/storageRequestRoute')
+
 const session = require("express-session");
 require("./middleware/passportMiddleware")
 
@@ -56,6 +59,8 @@ app.use('/api/file', fileRoute)
 app.use('/api/config', configRoute)
 app.use('/api/modelConfig', modelConfigRoute)
 app.use('/api/transaction', transactionRoute)
+app.use('/api/request', requestRoute)
+app.use('/api/storage', storageRequestRoute)
 
 // Start the server
 const PORT = process.env.PORT;
