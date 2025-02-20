@@ -9,7 +9,6 @@ const tenantIdentifier = async (req, res, next) => {
     if (!subdomain) {
       req.tenantId = null;
       req.tenantInfo = { role: 'superadmin' };
-      console.log("Req TenantId: " + req.tenantId) 
       return next();
     }
 

@@ -75,7 +75,6 @@ configRoute.get('/tenant', tenantIdentifier, async (req, res) => {
     // console.log("Attempting to get config")
     try {
         const tenantId = req.tenantId;
-        console.log(tenantId)
         const config = await Config.findOne({ tenantId }, '-img');
         if (!config) return res.status(404).json({ error: 'Configuration not found' });
         // console.log(config.config)

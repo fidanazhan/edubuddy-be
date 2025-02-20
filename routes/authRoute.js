@@ -87,8 +87,6 @@ authRoute.get(
 
             const { subdomain } = JSON.parse(req.query.state); // Parse the state to get the subdomain
 
-            console.log("user : " + JSON.stringify(user))
-
             if (user) {
                 const accessToken = generateToken(user, req.user);
                 const refreshToken = generateRefreshToken(user);
