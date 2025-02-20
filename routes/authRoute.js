@@ -24,6 +24,7 @@ const generateToken = (user, googleData) => {
         { 
             id: user.id, 
             name: googleData.displayName,
+            tenant: user.tenantId,
             email: user.email,
             photo: googleData.photo,
             role: user.role?.code,
@@ -82,9 +83,11 @@ authRoute.get(
                         path: 'permissions',
                         select: 'name code' // Fetch only permission name and code
                     }
-                });
+                })
 
-                const { subdomain } = JSON.parse(req.query.state); // Parse the state to get the subdomain
+            const { subdomain } = JSON.parse(req.query.state); // Parse the state to get the subdomain
+
+            console.log("user : " + JSON.stringify(user))
 
             if (user) {
                 const accessToken = generateToken(user, req.user);

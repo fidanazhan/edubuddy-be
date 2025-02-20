@@ -28,8 +28,8 @@ fileRouter.get("/", authMiddleware, async (req, res) => {
       }
 
       const tenantId = req.tenantId;
-      const userEmail = req.user.email;
-      const userRole = req.user.role;
+      const userEmail = req.decodedJWT.email;
+      const userRole = req.decodedJWT.role;
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
       const skip = (page - 1) * limit;
@@ -78,8 +78,8 @@ fileRouter.get("/", authMiddleware, async (req, res) => {
 // Upload file
 fileRouter.post("/upload", authMiddleware, upload.array("files", 5), async (req, res) => {
 
-  const userId = req.user.id;
-  const userEmail = req.user.email;  
+  const userId = req.decodedJWT.id;
+  const userEmail = req.decodedJWT.email;  
   const tenantId = req.tenantId;
 
   try {

@@ -19,10 +19,12 @@ const userSchema = new mongoose.Schema({
   GoogleAccessToken: {type: String},
   GoogleRefreshToken: {type: String},
   groups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Group' }],
+  totalToken: { type: Number, default: 0 },
+  usedToken: { type: Number, default: 0 },
 });
 
 // Create indexes
-userSchema.index({ tenantId: 1 }); 
+userSchema.index({ tenantId: 1 });
 userSchema.index({ role: 1 });
 
 // Export the User model

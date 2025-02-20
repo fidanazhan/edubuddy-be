@@ -8,6 +8,7 @@ const GroupUser = require('../models/GroupUser')
 const mongoose = require("mongoose");
 const multer = require("multer");
 const ExcelJS = require("exceljs");
+const authMiddleware = require('../middleware/authMiddleware');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -18,16 +19,16 @@ userRouter.post('/', async (req, res) => {
 
     // const session = await mongoose.startSession();
     // session.startTransaction();
-    
+
     try {
 
         const tenantId = req.tenantId
-        if(!tenantId){
+        if (!tenantId) {
             return res.status(404).json({ error: 'Please include tenant on header' });
         }
 
         // Search for the role by name and tenantId
-        const role = await Role.findOne({ code: req.body.role.toUpperCase(), tenantId: tenantId });        
+        const role = await Role.findOne({ code: req.body.role.toUpperCase(), tenantId: tenantId });
         if (!role) {
             return res.status(400).json({ error: 'Role not found for this tenant' });
         }
@@ -38,7 +39,7 @@ userRouter.post('/', async (req, res) => {
         }
 
         const groupIds = groupsDB.map(g => g._id);
-        
+
         // Create the user with the role
         const user = new User({
             ...req.body,
@@ -52,7 +53,8 @@ userRouter.post('/', async (req, res) => {
         // Add entries to GroupUser
         const groupUserEntries = groupIds.map(groupId => ({
             groupId,
-            userId: savedUser._id
+            userId: savedUser._id,
+            tenantId: tenantId
         }));
 
         // await GroupUser.insertMany(groupUserEntries, { session });
@@ -60,7 +62,7 @@ userRouter.post('/', async (req, res) => {
 
         // await session.commitTransaction();
         // session.endSession();
-        
+
         res.status(201).json(savedUser);
     } catch (error) {
         // await session.abortTransaction();
@@ -90,7 +92,7 @@ userRouter.post('/', async (req, res) => {
 userRouter.get('/', async (req, res) => {
     try {
 
-        if(!req.tenantId){
+        if (!req.tenantId) {
             return res.status(404).json({ error: 'Please include tenant on header' });
         }
 
@@ -105,7 +107,7 @@ userRouter.get('/', async (req, res) => {
             tenantId,
             $or: [
                 { name: { $regex: searchQuery, $options: 'i' } },
-                { email: { $regex: searchQuery, $options: 'i' } } 
+                { email: { $regex: searchQuery, $options: 'i' } }
             ]
         };
 
@@ -131,9 +133,6 @@ userRouter.get('/', async (req, res) => {
 });
 
 
-
-
-
 // Get User by ID
 userRouter.get('/:id', async (req, res) => {
     try {
@@ -154,14 +153,14 @@ userRouter.put('/:id', async (req, res) => {
     // session.startTransaction();
 
     try {
-     
+
         const tenantId = req.tenantId
         const userId = req.params.id;
 
-        if(!tenantId){
+        if (!tenantId) {
             return res.status(404).json({ error: 'Please include tenant on header' });
         }
-        
+
         const role = await Role.findOne({ code: req.body.role.toUpperCase(), tenantId: tenantId });
         if (!role) {
             return res.status(400).json({ error: 'Role not found for this tenant' });
@@ -191,7 +190,7 @@ userRouter.put('/:id', async (req, res) => {
 
         // Add new GroupUser entries
         if (groupsToAdd.length > 0) {
-            const groupUserEntries = groupsToAdd.map(groupId => ({ groupId, userId }));
+            const groupUserEntries = groupsToAdd.map(groupId => ({ groupId, userId, tenantId }));
             // await GroupUser.insertMany(groupUserEntries, { session });
             await GroupUser.insertMany(groupUserEntries);
         }
@@ -256,7 +255,7 @@ userRouter.post("/bulk-add", upload.single("file"), async (req, res) => {
       const headers = worksheet.getRow(1).values.slice(1); // Skip empty first index
   
       // Validate expected headers
-      const expectedHeaders = ["Name", "Email", "Status", "Role"];
+      const expectedHeaders = ["Name", "Email", "Status", "Role", "IC Number", "Start Date", "End Date"];
       const missingHeaders = expectedHeaders.filter(h => !headers.includes(h));
       if (missingHeaders.length > 0) {
         return res.status(400).json({ error: `Missing columns: ${missingHeaders.join(", ")}` });
@@ -308,7 +307,7 @@ userRouter.post("/bulk-add", upload.single("file"), async (req, res) => {
       res.status(201).json({ message: "Users uploaded successfully", users: savedUsers });
     } catch (error) {
       console.error("Error processing Excel file:", error);
-      res.status(500).json({ error: "Error processing file" });
+      res.status(500).json({ error: "Error processing file " + error});
     }
   });
 
@@ -404,6 +403,56 @@ userRouter.post("/bulk-update", upload.single("file"), async (req, res) => {
     res.status(500).json({ error: "Error processing file" });
   }
 });
-  
+
+userRouter.post('/bulk-delete', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: 'No file uploaded' });
+  }
+
+  const tenantId = req.tenantId; // Assuming tenantId is passed in headers
+  if (!tenantId) {
+    return res.status(400).json({ error: 'Please include tenant in the header' });
+  }
+
+  try {
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(req.file.buffer);
+    const worksheet = workbook.worksheets[0]; // First sheet
+
+    if (!worksheet) {
+      return res.status(400).json({ message: 'No sheets found in the Excel file' });
+    }
+
+    // Extract emails from column A, starting from the second row
+    const emailsToDelete = [];
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) { // Skip header row
+        const email = row.getCell(1).text.trim();
+        if (email) {
+          emailsToDelete.push(email.toLowerCase());
+        }
+      }
+    });
+
+    if (emailsToDelete.length === 0) {
+      return res.status(400).json({ message: 'No emails found in the file' });
+    }
+
+    // Delete users matching the emails and tenantId
+    const deleteResult = await User.deleteMany({
+      email: { $in: emailsToDelete },
+      tenantId
+    });
+
+    res.status(200).json({
+      message: `${deleteResult.deletedCount} user(s) deleted successfully`
+    });
+  } catch (error) {
+    console.error('Error processing Excel file:', error);
+    res.status(500).json({ error: 'Error processing file' });
+  }
+});
+
+
 
 module.exports = userRouter;

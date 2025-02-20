@@ -12,10 +12,13 @@ const passport = require("passport");
 const passportRoute = require("./routes/passportRoute")
 const chatRoute = require('./routes/chatRoute')
 const fileRoute = require('./routes/fileRoute')
+const configRoute = require('./routes/configRoute')
+const modelConfigRoute = require('./routes/modelConfigRoute')
+const transactionRoute = require('./routes/transactionRoute')
 const session = require("express-session");
-require("./middleware/passportMiddleware") 
+require("./middleware/passportMiddleware")
 
-const cors = require('cors')
+const cors = require('cors');
 
 require('dotenv').config();
 
@@ -50,6 +53,9 @@ app.use('/api', passportRoute)
 app.use('/api/chat', chatRoute)
 app.use('/api/group', groupRoute)
 app.use('/api/file', fileRoute)
+app.use('/api/config', configRoute)
+app.use('/api/modelConfig', modelConfigRoute)
+app.use('/api/transaction', transactionRoute)
 
 // Start the server
 const PORT = process.env.PORT;
