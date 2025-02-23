@@ -12,8 +12,8 @@ const requestRoute = express.Router();
 requestRoute.post('/token', async (req, res) => {
     try {
         const tenantId = req.tenantId;
-        const { requester, amount, status } = req.body;
-        const newRequest = new Request({ tenantId, requester, amount, status });
+        const { requester, amount, status, reason } = req.body;
+        const newRequest = new Request({ tenantId, requester, amount, status, reason });
         const savedRequest = await newRequest.save();
         res.status(201).json(savedRequest);
     } catch (err) {
@@ -79,24 +79,24 @@ requestRoute.get('/token/status', async (req, res) => {
 
 // Approve a Request by ID
 requestRoute.put('/token/approve', async (req, res) => {
-    console.log("Approving requests")
+    // console.log("Approving requests")
     try {
         const requestData = req.body || {};
-        console.log(requestData);
-        console.log("User");
+        // console.log(requestData);
+        // console.log("User");
         const updatedUser = await User.findByIdAndUpdate(
             requestData.requester._id,
             { $inc: { totalToken: requestData.amount } },
             { new: true, runValidators: true }
         );
-        console.log("Updated User", updatedUser)
-        console.log("Request")
+        // console.log("Updated User", updatedUser)
+        // console.log("Request")
         const updatedRequest = await Request.findByIdAndUpdate(
             requestData._id,
             { $set: { status: 1 } },
             { new: true, runValidators: true }
         );
-        console.log("Updated Request", updatedRequest)
+        // console.log("Updated Request", updatedRequest)
         if (!updatedRequest) return res.status(404).json({ error: 'Request not found' });
         res.status(200).json(updatedRequest);
     } catch (err) {
@@ -106,17 +106,17 @@ requestRoute.put('/token/approve', async (req, res) => {
 
 // Reject a Request by ID
 requestRoute.put('/token/reject', async (req, res) => {
-    console.log("Rejecting requests")
+    // console.log("Rejecting requests")
     try {
         const requestData = req.body || {};
-        console.log(requestData);
-        console.log("Request");
+        // console.log(requestData);
+        // console.log("Request");
         const updatedRequest = await Request.findByIdAndUpdate(
             requestData._id,
             { $set: { status: 2 } },
             { new: true, runValidators: true }
         );
-        console.log("Updated Request", updatedRequest)
+        // console.log("Updated Request", updatedRequest)
         if (!updatedRequest) return res.status(404).json({ error: 'Request not found' });
         res.status(200).json(updatedRequest);
     } catch (err) {
@@ -131,8 +131,8 @@ requestRoute.put('/token/reject', async (req, res) => {
 requestRoute.post('/storage', async (req, res) => {
     try {
         const tenantId = req.tenantId;
-        const { requester, amount, status } = req.body;
-        const newStorageRequest = new StorageRequest({ tenantId, requester, amount, status });
+        const { requester, amount, status, reason } = req.body;
+        const newStorageRequest = new StorageRequest({ tenantId, requester, amount, status, reason });
         const savedStorageRequest = await newStorageRequest.save();
         res.status(201).json(savedStorageRequest);
     } catch (err) {

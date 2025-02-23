@@ -20,7 +20,8 @@ const userSchema = new mongoose.Schema({
   groups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Group' }],
   totalToken: { type: Number, default: 0 },
   usedToken: { type: Number, default: 0 },
-});
+  distributedToken: { type: Number, default: 0 },
+}, { timestamps: true });
 
 // Create indexes
 userSchema.index({ tenantId: 1 });

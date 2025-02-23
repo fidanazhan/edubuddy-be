@@ -64,15 +64,26 @@ transactionRouter.get('/token', async (req, res) => {
         // console.log(page, limit, skip)
         const searchSenderQuery = req.query.searchSender || '';
         const searchReceiverQuery = req.query.searchReceiver || '';
+        const searchStartDate = req.query.startDate ? new Date(req.query.startDate) : undefined;
+        if (searchStartDate) {
+            searchStartDate.setHours(0, 0, 0, 0);
+        }
+        const searchEndDate = req.query.endDate ? new Date(req.query.endDate) : undefined;
+        if (searchEndDate) {
+            searchEndDate.setHours(23, 59, 59, 999);
+        }
+        // console.log(searchStartDate, searchEndDate)
         const tenantId = req.tenantId;
 
         const searchConditions = {
             tenantId,
             $and: [
-                { 'sender.senderName': { $regex: searchSenderQuery, $options: 'i' } },
-                { 'receiver.receiverName': { $regex: searchReceiverQuery, $options: 'i' } }
+                searchSenderQuery ? { 'sender.senderName': { $regex: searchSenderQuery, $options: 'i' } } : {},
+                searchReceiverQuery ? { 'receiver.receiverName': { $regex: searchReceiverQuery, $options: 'i' } } : {},
+                searchStartDate ? { 'createdAt': { $gte: searchStartDate, $lte: searchEndDate } } : {}
             ]
         };
+        // console.log(searchConditions)
         // console.log("Fetching Transaction")
         // Fetch paginated users with search conditions
         const transactions = await Transaction.find(searchConditions, '-tenantId')
@@ -156,13 +167,16 @@ transactionRouter.get('/storage', async (req, res) => {
         // console.log(page, limit, skip)
         const searchSenderQuery = req.query.searchSender || '';
         const searchReceiverQuery = req.query.searchReceiver || '';
+        const searchStartDate = req.query.startDate || '';
+        const searchEndDate = req.query.endDate || '';
         const tenantId = req.tenantId;
 
         const searchConditions = {
             tenantId,
             $and: [
                 { 'sender.senderName': { $regex: searchSenderQuery, $options: 'i' } },
-                { 'receiver.receiverName': { $regex: searchReceiverQuery, $options: 'i' } }
+                { 'receiver.receiverName': { $regex: searchReceiverQuery, $options: 'i' } },
+                { 'createdAt': { $gte: searchStartDate, $lte: searchEndDate } }
             ]
         };
         // console.log("Fetching Transaction")
