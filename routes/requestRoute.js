@@ -13,7 +13,10 @@ requestRoute.post('/token', async (req, res) => {
     try {
         const tenantId = req.tenantId;
         const { requester, amount, status, reason } = req.body;
-        const newRequest = new Request({ tenantId, requester, amount, status, reason });
+        const newRequest = new Request({
+            ...req.body,
+            tenantId: tenantId,
+        });
         const savedRequest = await newRequest.save();
         res.status(201).json(savedRequest);
     } catch (err) {
@@ -132,7 +135,10 @@ requestRoute.post('/storage', async (req, res) => {
     try {
         const tenantId = req.tenantId;
         const { requester, amount, status, reason } = req.body;
-        const newStorageRequest = new StorageRequest({ tenantId, requester, amount, status, reason });
+        const newStorageRequest = new StorageRequest({
+            ...req.body,
+            tenantId: tenantId,
+        });
         const savedStorageRequest = await newStorageRequest.save();
         res.status(201).json(savedStorageRequest);
     } catch (err) {

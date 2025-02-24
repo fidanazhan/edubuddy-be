@@ -112,7 +112,6 @@ transactionRouter.get('/token', async (req, res) => {
 
 // Create Transaction
 transactionRouter.post('/storage', async (req, res) => {
-
     // const { sender, receiver, amount, senderBefore, receiverBefore, senderAfter, receiverAfter } = req.body;
     try {
 
@@ -122,12 +121,12 @@ transactionRouter.post('/storage', async (req, res) => {
         }
 
         // Create the user with the role
-        const StorageTransaction = new StorageTransaction({
+        const newStorageTransaction = new StorageTransaction({
             ...req.body,
             tenantId: tenantId,
         });
 
-        const savedTransaction = await StorageTransaction.save();
+        const savedTransaction = await newStorageTransaction.save();
 
         res.status(201).json(savedTransaction);
     } catch (error) {
@@ -167,16 +166,23 @@ transactionRouter.get('/storage', async (req, res) => {
         // console.log(page, limit, skip)
         const searchSenderQuery = req.query.searchSender || '';
         const searchReceiverQuery = req.query.searchReceiver || '';
-        const searchStartDate = req.query.startDate || '';
-        const searchEndDate = req.query.endDate || '';
+        const searchStartDate = req.query.startDate ? new Date(req.query.startDate) : undefined;
+        if (searchStartDate) {
+            searchStartDate.setHours(0, 0, 0, 0);
+        }
+        const searchEndDate = req.query.endDate ? new Date(req.query.endDate) : undefined;
+        if (searchEndDate) {
+            searchEndDate.setHours(23, 59, 59, 999);
+        }
+        // console.log(searchStartDate, searchEndDate)
         const tenantId = req.tenantId;
 
         const searchConditions = {
             tenantId,
             $and: [
-                { 'sender.senderName': { $regex: searchSenderQuery, $options: 'i' } },
-                { 'receiver.receiverName': { $regex: searchReceiverQuery, $options: 'i' } },
-                { 'createdAt': { $gte: searchStartDate, $lte: searchEndDate } }
+                searchSenderQuery ? { 'sender.senderName': { $regex: searchSenderQuery, $options: 'i' } } : {},
+                searchReceiverQuery ? { 'receiver.receiverName': { $regex: searchReceiverQuery, $options: 'i' } } : {},
+                searchStartDate ? { 'createdAt': { $gte: searchStartDate, $lte: searchEndDate } } : {}
             ]
         };
         // console.log("Fetching Transaction")
