@@ -5,8 +5,8 @@ const roleSchema = new mongoose.Schema({
     code: { type: String, required: true },
     permissions: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Permission' }],
     tenantId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'Tenant' },
-    defaultToken: { type: Number, default: 0 },
-    defaultStorage: { type: Number, default: 0 },
+    defaultToken: { type: Number, default: 500 },
+    defaultStorage: { type: Number, default: 500 },
 });
 
 module.exports = mongoose.model('Role', roleSchema);

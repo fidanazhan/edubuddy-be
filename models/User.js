@@ -5,8 +5,6 @@ const userSchema = new mongoose.Schema({
   tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', required: true },
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  createdAt: { type: Date, default: Date.now },
-  modifiedAt: { type: Date, default: Date.now },
   createdBy: { type: String },
   modifiedBy: { type: String },
   role: { type: mongoose.Schema.Types.ObjectId, ref: 'Role' },
