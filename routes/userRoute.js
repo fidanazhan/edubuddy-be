@@ -93,47 +93,57 @@ userRouter.post('/', authMiddleware, async (req, res) => {
 
 // Get All Users From Specific Tenant
 userRouter.get('/', async (req, res) => {
-    try {
+  try {
+      if (!req.tenantId) {
+          return res.status(404).json({ error: 'Please include tenant on header' });
+      }
 
-        if (!req.tenantId) {
-            return res.status(404).json({ error: 'Please include tenant on header' });
-        }
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const skip = (page - 1) * limit;
 
-        const page = parseInt(req.query.page) || 1; // Default page 1
-        const limit = parseInt(req.query.limit) || 10; // Default 5 data per page
-        const skip = (page - 1) * limit;
+      const searchQuery = req.query.search || '';
+      const tenantId = req.tenantId;
 
-        const searchQuery = req.query.search || '';
-        const tenantId = req.tenantId;
+      let searchConditions = { tenantId };
 
-        const searchConditions = {
-            tenantId,
-            $or: [
-                { name: { $regex: searchQuery, $options: 'i' } },
-                { email: { $regex: searchQuery, $options: 'i' } }
-            ]
-        };
+      if (searchQuery) {
+          // Find group IDs matching the search query
+          const matchingGroups = await Group.find({ 
+              name: { $regex: searchQuery, $options: 'i' } 
+          }).select('_id');
 
-        // Fetch paginated users with search conditions
-        const users = await User.find(searchConditions, '-tenantId -createdAt -modifiedAt')
-            .populate('groups', 'name code')
-            .populate('role', 'name code permissions -_id')
-            .skip(skip)
-            .limit(limit);
+          const groupIds = matchingGroups.map(group => group._id);
 
-        const total = await User.countDocuments(searchConditions);
+          // Search for users in those groups OR by name/email
+          searchConditions.$or = [
+              { groups: { $in: groupIds } },
+              { name: { $regex: searchQuery, $options: 'i' } },
+              { email: { $regex: searchQuery, $options: 'i' } }
+          ];
+      }
 
-        res.json({
-            total,
-            page,
-            pages: Math.ceil(total / limit),
-            limit,
-            data: users,
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+      // Fetch paginated users
+      const users = await User.find(searchConditions, '-tenantId -createdAt -modifiedAt')
+          .populate('groups', 'name code')
+          .populate('role', 'name code permissions -_id')
+          .skip(skip)
+          .limit(limit);
+
+      const total = await User.countDocuments(searchConditions);
+
+      res.json({
+          total,
+          page,
+          pages: Math.ceil(total / limit),
+          limit,
+          data: users,
+      });
+  } catch (error) {
+      res.status(500).json({ error: error.message });
+  }
 });
+
 
 userRouter.get('/select', async (req, res) => {
   try {
