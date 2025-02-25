@@ -132,48 +132,33 @@ userRouter.get('/', async (req, res) => {
     }
 });
 
-// // Get All Users From Specific Tenant
-// userRouter.get('/token', async (req, res) => {
-//     try {
+userRouter.get('/select', async (req, res) => {
+  try {
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+          return res.status(404).json({ error: 'Please include tenant in header' });
+      }
 
-//         if (!req.tenantId) {
-//             return res.status(404).json({ error: 'Please include tenant on header' });
-//         }
+      const limit = parseInt(req.query.limit) || 10; // Default limit to 10
+      const searchQuery = req.query.search || '';
+      const searchConditions = {
+          tenantId,
+          $or: [
+              { name: { $regex: searchQuery, $options: 'i' } },
+              { email: { $regex: searchQuery, $options: 'i' } },
+          ]
+      };
 
-//         const page = parseInt(req.query.page) || 1; // Default page 1
-//         const limit = parseInt(req.query.limit) || 10; // Default 10 data per page
-//         const skip = (page - 1) * limit;
+      // Fetch the roles with search conditions and limit the results to 10
+      const roles = await User.find(searchConditions)
+          .select('name email')  // Select only the 'name' and 'code' fields
+          .limit(limit);
 
-//         const searchQuery = req.query.search || '';
-//         const tenantId = req.tenantId;
-
-//         const searchConditions = {
-//             tenantId,
-//             $or: [
-//                 { name: { $regex: searchQuery, $options: 'i' } },
-//                 { email: { $regex: searchQuery, $options: 'i' } }
-//             ]
-//         };
-
-//         // Fetch paginated users with search conditions
-//         const users = await User.find(searchConditions, '-tenantId -createdAt -modifiedAt')
-//             .populate('role', 'name code permissions -_id')
-//             .skip(skip)
-//             .limit(limit);
-
-//         const total = await User.countDocuments(searchConditions);
-
-//         res.json({
-//             total,
-//             page,
-//             pages: Math.ceil(total / limit),
-//             limit,
-//             data: users,
-//         });
-//     } catch (error) {
-//         res.status(500).json({ error: error.message });
-//     }
-// });
+      res.status(200).json(roles);
+  } catch (err) {
+      res.status(500).json({ error: err.message });
+  }
+});
 
 
 // Get User by ID
