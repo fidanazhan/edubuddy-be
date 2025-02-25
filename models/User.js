@@ -5,8 +5,6 @@ const userSchema = new mongoose.Schema({
   tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', required: true },
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  createdAt: { type: Date, default: Date.now },
-  modifiedAt: { type: Date, default: Date.now },
   createdBy: { type: String },
   modifiedBy: { type: String },
   role: { type: mongoose.Schema.Types.ObjectId, ref: 'Role' },
@@ -21,7 +19,8 @@ const userSchema = new mongoose.Schema({
   groups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Group' }],
   totalToken: { type: Number, default: 0 },
   usedToken: { type: Number, default: 0 },
-});
+  distributedToken: { type: Number, default: 0 },
+}, { timestamps: true });
 
 // Create indexes
 userSchema.index({ tenantId: 1 });
