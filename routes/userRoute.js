@@ -103,24 +103,41 @@ userRouter.get('/', async (req, res) => {
       const skip = (page - 1) * limit;
 
       const searchQuery = req.query.search || '';
+      const filterByGroup = req.query.filterByGroup === 'true';
       const tenantId = req.tenantId;
 
       let searchConditions = { tenantId };
 
       if (searchQuery) {
-          // Find group IDs matching the search query
-          const matchingGroups = await Group.find({ 
-              name: { $regex: searchQuery, $options: 'i' } 
-          }).select('_id');
+          if (filterByGroup) {
+              // Step 1: Find matching group IDs
+              const matchingGroups = await Group.find({ 
+                  name: { $regex: searchQuery, $options: 'i' } 
+              }).select('_id');
 
-          const groupIds = matchingGroups.map(group => group._id);
+              const groupIds = matchingGroups.map(group => group._id);
 
-          // Search for users in those groups OR by name/email
-          searchConditions.$or = [
-              { groups: { $in: groupIds } },
-              { name: { $regex: searchQuery, $options: 'i' } },
-              { email: { $regex: searchQuery, $options: 'i' } }
-          ];
+              if (groupIds.length === 0) {
+                  return res.status(404).json({ error: 'User not found' });
+              }
+
+              // Step 2: Find user IDs from groupUserSchema
+              const groupUsers = await GroupUser.find({ groupId: { $in: groupIds } }).select('userId');
+              const userIds = groupUsers.map(gu => gu.userId);
+
+              if (userIds.length === 0) {
+                  return res.status(404).json({ error: 'User not found' });
+              }
+
+              // Step 3: Filter users by group
+              searchConditions._id = { $in: userIds };
+          } else {
+              // Search users by name or email (default behavior)
+              searchConditions.$or = [
+                  { name: { $regex: searchQuery, $options: 'i' } },
+                  { email: { $regex: searchQuery, $options: 'i' } }
+              ];
+          }
       }
 
       // Fetch paginated users
@@ -131,6 +148,10 @@ userRouter.get('/', async (req, res) => {
           .limit(limit);
 
       const total = await User.countDocuments(searchConditions);
+
+      if (users.length === 0) {
+          return res.status(404).json({ error: 'User not found' });
+      }
 
       res.json({
           total,
@@ -173,6 +194,86 @@ userRouter.get('/select', async (req, res) => {
   }
 });
 
+userRouter.get('/download', async (req, res) => {
+  try {
+      if (!req.tenantId) {
+          return res.status(400).json({ error: 'Please include tenant in the header' });
+      }
+
+      const tenantId = req.tenantId;
+      const searchQuery = req.query.search || '';
+      const filterByGroup = req.query.filterByGroup === 'true';
+
+      let searchConditions = { tenantId };
+
+      if (searchQuery) {
+          if (filterByGroup) {
+              const matchingGroups = await Group.find({ 
+                  name: { $regex: searchQuery, $options: 'i' } 
+              }).select('_id');
+
+              const groupIds = matchingGroups.map(group => group._id);
+
+              if (groupIds.length > 0) {
+                  const groupUsers = await GroupUser.find({ groupId: { $in: groupIds } }).select('userId');
+                  const userIds = groupUsers.map(gu => gu.userId);
+
+                  searchConditions._id = { $in: userIds };
+              } else {
+                  return res.status(404).json({ error: 'No users found for the specified group' });
+              }
+          } else {
+              searchConditions.$or = [
+                  { name: { $regex: searchQuery, $options: 'i' } },
+                  { email: { $regex: searchQuery, $options: 'i' } }
+              ];
+          }
+      }
+
+      const users = await User.find(searchConditions).populate('groups', 'name');
+
+      if (!users.length) {
+          return res.status(404).json({ error: 'No users found' });
+      }
+
+      // Create Excel workbook
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Users');
+
+      // Add headers
+      worksheet.addRow([
+          'Name', 'Email', 'Status', 'IC Number', 'Total Storage', 'Used Storage', 
+          'Total Token', 'Used Token', 'Distributed Token', 'Groups'
+      ]);
+
+      // Add user data
+      users.forEach(user => {
+          worksheet.addRow([
+              user.name, 
+              user.email, 
+              user.status === 1 ? 'Active' : user.status === 0 ? 'Not Active' : 'Suspended',
+              user.ICNumber || 'N/A',
+              user.totalStorage,
+              user.usedStorage,
+              user.totalToken,
+              user.usedToken,
+              user.distributedToken,
+              user.groups.map(g => g.name).join(', ')
+          ]);
+      });
+
+      // Set response headers for file download
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename=users.xlsx');
+
+      // Send the file as a stream
+      await workbook.xlsx.write(res);
+      res.end();
+  } catch (error) {
+      console.error('Error generating Excel:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
 
 // Get User by ID
 userRouter.get('/:id', async (req, res) => {
@@ -502,6 +603,9 @@ userRouter.post('/bulk-delete', upload.single('file'), async (req, res) => {
     res.status(500).json({ error: 'Error processing file' });
   }
 });
+
+
+
 
 
 
