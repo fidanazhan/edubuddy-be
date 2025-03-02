@@ -12,6 +12,7 @@
   "description": "",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.744.0",
+    "@google-cloud/storage": "^7.15.2",
     "@google/generative-ai": "^0.21.0",
     "aws-sdk": "^2.1692.0",
     "body-parser": "^1.20.3",

@@ -20,6 +20,7 @@ const userSchema = new mongoose.Schema({
   totalToken: { type: Number, default: 0 },
   usedToken: { type: Number, default: 0 },
   distributedToken: { type: Number, default: 0 },
+  theme: { type: String, enum: ["light", "dark"], default: "light" },
 }, { timestamps: true });
 
 // Create indexes

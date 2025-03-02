@@ -3,6 +3,8 @@ const multer = require("multer");
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
 const File = require("../models/File");
 const User = require("../models/User");
+const { Storage } = require("@google-cloud/storage");
+const path = require("path");
 const fileRouter = express.Router();
 const authMiddleware = require("../middleware/authMiddleware")
 
@@ -76,56 +78,56 @@ fileRouter.get("/", authMiddleware, async (req, res) => {
 
 
 // Upload file
-fileRouter.post("/upload", authMiddleware, upload.array("files", 5), async (req, res) => {
+// fileRouter.post("/upload", authMiddleware, upload.array("files", 5), async (req, res) => {
 
-  const userId = req.decodedJWT.id;
-  const userEmail = req.decodedJWT.email;  
-  const tenantId = req.tenantId;
+//   const userId = req.decodedJWT.id;
+//   const userEmail = req.decodedJWT.email;  
+//   const tenantId = req.tenantId;
 
-  try {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ message: "No files uploaded" });
-    }
+//   try {
+//     if (!req.files || req.files.length === 0) {
+//       return res.status(400).json({ message: "No files uploaded" });
+//     }
 
-    const tag = Array.isArray(req.body.tag) ? req.body.tag[0] : req.body.tag;
+//     const tag = Array.isArray(req.body.tag) ? req.body.tag[0] : req.body.tag;
 
-    // Process all files before saving
-    const uploadedFiles = await Promise.all(
-      req.files.map(async (file) => {
-        const uniqueFileName = `${Date.now()}-${file.originalname}`;
-        const filePath = `${tenantId}/${userEmail}/${uniqueFileName}`;
+//     // Process all files before saving
+//     const uploadedFiles = await Promise.all(
+//       req.files.map(async (file) => {
+//         const uniqueFileName = `${Date.now()}-${file.originalname}`;
+//         const filePath = `${tenantId}/${userEmail}/${uniqueFileName}`;
 
-        const uploadParams = {
-          Bucket: process.env.DO_SPACES_BUCKET,
-          Key: filePath,
-          Body: file.buffer,
-          ContentType: file.mimetype,
-          ACL: "public-read",
-        };
+//         const uploadParams = {
+//           Bucket: process.env.DO_SPACES_BUCKET,
+//           Key: filePath,
+//           Body: file.buffer,
+//           ContentType: file.mimetype,
+//           ACL: "public-read",
+//         };
 
-        await s3.send(new PutObjectCommand(uploadParams));
+//         await s3.send(new PutObjectCommand(uploadParams));
 
-        return {
-          originalName: file.originalname,
-          storedName: filePath,
-          tag: tag, // Assign the single tag to all files
-          url: `${process.env.DO_SPACES_ENDPOINT}/${process.env.DO_SPACES_BUCKET}/${uniqueFileName}`,
-          type: file.mimetype,
-          size: file.size,
-          tenantId: req.tenantId,
-          uploadedBy: userId,
-        };
-      })
-    );
+//         return {
+//           originalName: file.originalname,
+//           storedName: filePath,
+//           tag: tag, // Assign the single tag to all files
+//           url: `${process.env.DO_SPACES_ENDPOINT}/${process.env.DO_SPACES_BUCKET}/${uniqueFileName}`,
+//           type: file.mimetype,
+//           size: file.size,
+//           tenantId: req.tenantId,
+//           uploadedBy: userId,
+//         };
+//       })
+//     );
 
-    // Save all files at once (bulk insert)
-    await File.insertMany(uploadedFiles);
+//     // Save all files at once (bulk insert)
+//     await File.insertMany(uploadedFiles);
 
-    res.status(201).json({ message: "Files uploaded successfully", files: uploadedFiles });
-  } catch (error) {
-    res.status(500).json({ message: "Upload failed", error: error.message });
-  }
-});
+//     res.status(201).json({ message: "Files uploaded successfully", files: uploadedFiles });
+//   } catch (error) {
+//     res.status(500).json({ message: "Upload failed", error: error.message });
+//   }
+// });
 
 // Delete file
 fileRouter.delete("/delete/:id", async (req, res) => {
@@ -186,5 +188,58 @@ fileRouter.post("/delete-multiple", authMiddleware, async (req, res) => {
   }
 });
 
+const googleStorage = new Storage({
+  keyFilename: process.env.GOOGLE_CLOUD_KEYFILE, // Path to your service account JSON
+  projectId: process.env.GOOGLE_CLOUD_PROJECT,  // Your Google Cloud Project ID
+});
+
+const bucket = googleStorage.bucket(process.env.GOOGLE_CLOUD_BUCKET);
+
+fileRouter.post("/upload", authMiddleware, upload.array("files", 5), async (req, res) => {
+  const userId = req.decodedJWT.id;
+  const userEmail = req.decodedJWT.email;
+  const tenantId = req.tenantId;
+
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ message: "No files uploaded" });
+    }
+
+    const tag = Array.isArray(req.body.tag) ? req.body.tag[0] : req.body.tag;
+
+    const uploadedFiles = await Promise.all(
+      req.files.map(async (file) => {
+        const uniqueFileName = `${Date.now()}-${file.originalname}`;
+        const filePath = `${tenantId}/${userEmail}/${uniqueFileName}`;
+        const gcsFile = bucket.file(filePath);
+
+        // Upload file to Google Cloud Storage
+        await gcsFile.save(file.buffer, {
+          metadata: { contentType: file.mimetype },
+          //public: true, // Make file publicly accessible
+        });
+
+        const publicUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
+
+        return {
+          originalName: file.originalname,
+          storedName: filePath,
+          tag: tag,
+          url: publicUrl,
+          type: file.mimetype,
+          size: file.size,
+          tenantId: req.tenantId,
+          uploadedBy: userId,
+        };
+      })
+    );
+
+    await File.insertMany(uploadedFiles);
+
+    res.status(201).json({ message: "Files uploaded successfully", files: uploadedFiles });
+  } catch (error) {
+    res.status(500).json({ message: "Upload failed", error: error.message });
+  }
+});
 
 module.exports = fileRouter;
