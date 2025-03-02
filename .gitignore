@@ -98,3 +98,6 @@ public
 
 # Local environments
 *.local
+
+# Any key for cloud
+key/
