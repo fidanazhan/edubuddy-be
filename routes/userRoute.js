@@ -93,186 +93,186 @@ userRouter.post('/', authMiddleware, async (req, res) => {
 
 // Get All Users From Specific Tenant
 userRouter.get('/', async (req, res) => {
-  try {
-      if (!req.tenantId) {
-          return res.status(404).json({ error: 'Please include tenant on header' });
-      }
+    try {
+        if (!req.tenantId) {
+            return res.status(404).json({ error: 'Please include tenant on header' });
+        }
 
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
-      const skip = (page - 1) * limit;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const skip = (page - 1) * limit;
 
-      const searchQuery = req.query.search || '';
-      const filterByGroup = req.query.filterByGroup === 'true';
-      const tenantId = req.tenantId;
+        const searchQuery = req.query.search || '';
+        const filterByGroup = req.query.filterByGroup === 'true';
+        const tenantId = req.tenantId;
 
-      let searchConditions = { tenantId };
+        let searchConditions = { tenantId };
 
-      if (searchQuery) {
-          if (filterByGroup) {
-              // Step 1: Find matching group IDs
-              const matchingGroups = await Group.find({ 
-                  name: { $regex: searchQuery, $options: 'i' } 
-              }).select('_id');
+        if (searchQuery) {
+            if (filterByGroup) {
+                // Step 1: Find matching group IDs
+                const matchingGroups = await Group.find({
+                    name: { $regex: searchQuery, $options: 'i' }
+                }).select('_id');
 
-              const groupIds = matchingGroups.map(group => group._id);
+                const groupIds = matchingGroups.map(group => group._id);
 
-              if (groupIds.length === 0) {
-                  return res.status(404).json({ error: 'User not found' });
-              }
+                if (groupIds.length === 0) {
+                    return res.status(404).json({ error: 'User not found' });
+                }
 
-              // Step 2: Find user IDs from groupUserSchema
-              const groupUsers = await GroupUser.find({ groupId: { $in: groupIds } }).select('userId');
-              const userIds = groupUsers.map(gu => gu.userId);
+                // Step 2: Find user IDs from groupUserSchema
+                const groupUsers = await GroupUser.find({ groupId: { $in: groupIds } }).select('userId');
+                const userIds = groupUsers.map(gu => gu.userId);
 
-              if (userIds.length === 0) {
-                  return res.status(404).json({ error: 'User not found' });
-              }
+                if (userIds.length === 0) {
+                    return res.status(404).json({ error: 'User not found' });
+                }
 
-              // Step 3: Filter users by group
-              searchConditions._id = { $in: userIds };
-          } else {
-              // Search users by name or email (default behavior)
-              searchConditions.$or = [
-                  { name: { $regex: searchQuery, $options: 'i' } },
-                  { email: { $regex: searchQuery, $options: 'i' } }
-              ];
-          }
-      }
+                // Step 3: Filter users by group
+                searchConditions._id = { $in: userIds };
+            } else {
+                // Search users by name or email (default behavior)
+                searchConditions.$or = [
+                    { name: { $regex: searchQuery, $options: 'i' } },
+                    { email: { $regex: searchQuery, $options: 'i' } }
+                ];
+            }
+        }
 
-      // Fetch paginated users
-      const users = await User.find(searchConditions, '-tenantId -createdAt -modifiedAt')
-          .populate('groups', 'name code')
-          .populate('role', 'name code permissions -_id')
-          .skip(skip)
-          .limit(limit);
+        // Fetch paginated users
+        const users = await User.find(searchConditions, '-tenantId -createdAt -modifiedAt')
+            .populate('groups', 'name code')
+            .populate('role', 'name code permissions -_id')
+            .skip(skip)
+            .limit(limit);
 
-      const total = await User.countDocuments(searchConditions);
+        const total = await User.countDocuments(searchConditions);
 
-      if (users.length === 0) {
-          return res.status(404).json({ error: 'User not found' });
-      }
+        if (users.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
 
-      res.json({
-          total,
-          page,
-          pages: Math.ceil(total / limit),
-          limit,
-          data: users,
-      });
-  } catch (error) {
-      res.status(500).json({ error: error.message });
-  }
+        res.json({
+            total,
+            page,
+            pages: Math.ceil(total / limit),
+            limit,
+            data: users,
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 
 userRouter.get('/select', async (req, res) => {
-  try {
-      const tenantId = req.tenantId;
-      if (!tenantId) {
-          return res.status(404).json({ error: 'Please include tenant in header' });
-      }
+    try {
+        const tenantId = req.tenantId;
+        if (!tenantId) {
+            return res.status(404).json({ error: 'Please include tenant in header' });
+        }
 
-      const limit = parseInt(req.query.limit) || 10; // Default limit to 10
-      const searchQuery = req.query.search || '';
-      const searchConditions = {
-          tenantId,
-          $or: [
-              { name: { $regex: searchQuery, $options: 'i' } },
-              { email: { $regex: searchQuery, $options: 'i' } },
-          ]
-      };
+        const limit = parseInt(req.query.limit) || 10; // Default limit to 10
+        const searchQuery = req.query.search || '';
+        const searchConditions = {
+            tenantId,
+            $or: [
+                { name: { $regex: searchQuery, $options: 'i' } },
+                { email: { $regex: searchQuery, $options: 'i' } },
+            ]
+        };
 
-      // Fetch the roles with search conditions and limit the results to 10
-      const roles = await User.find(searchConditions)
-          .select('name email')  // Select only the 'name' and 'code' fields
-          .limit(limit);
+        // Fetch the roles with search conditions and limit the results to 10
+        const roles = await User.find(searchConditions)
+            .select('name email')  // Select only the 'name' and 'code' fields
+            .limit(limit);
 
-      res.status(200).json(roles);
-  } catch (err) {
-      res.status(500).json({ error: err.message });
-  }
+        res.status(200).json(roles);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 userRouter.get('/download', async (req, res) => {
-  try {
-      if (!req.tenantId) {
-          return res.status(400).json({ error: 'Please include tenant in the header' });
-      }
+    try {
+        if (!req.tenantId) {
+            return res.status(400).json({ error: 'Please include tenant in the header' });
+        }
 
-      const tenantId = req.tenantId;
-      const searchQuery = req.query.search || '';
-      const filterByGroup = req.query.filterByGroup === 'true';
+        const tenantId = req.tenantId;
+        const searchQuery = req.query.search || '';
+        const filterByGroup = req.query.filterByGroup === 'true';
 
-      let searchConditions = { tenantId };
+        let searchConditions = { tenantId };
 
-      if (searchQuery) {
-          if (filterByGroup) {
-              const matchingGroups = await Group.find({ 
-                  name: { $regex: searchQuery, $options: 'i' } 
-              }).select('_id');
+        if (searchQuery) {
+            if (filterByGroup) {
+                const matchingGroups = await Group.find({
+                    name: { $regex: searchQuery, $options: 'i' }
+                }).select('_id');
 
-              const groupIds = matchingGroups.map(group => group._id);
+                const groupIds = matchingGroups.map(group => group._id);
 
-              if (groupIds.length > 0) {
-                  const groupUsers = await GroupUser.find({ groupId: { $in: groupIds } }).select('userId');
-                  const userIds = groupUsers.map(gu => gu.userId);
+                if (groupIds.length > 0) {
+                    const groupUsers = await GroupUser.find({ groupId: { $in: groupIds } }).select('userId');
+                    const userIds = groupUsers.map(gu => gu.userId);
 
-                  searchConditions._id = { $in: userIds };
-              } else {
-                  return res.status(404).json({ error: 'No users found for the specified group' });
-              }
-          } else {
-              searchConditions.$or = [
-                  { name: { $regex: searchQuery, $options: 'i' } },
-                  { email: { $regex: searchQuery, $options: 'i' } }
-              ];
-          }
-      }
+                    searchConditions._id = { $in: userIds };
+                } else {
+                    return res.status(404).json({ error: 'No users found for the specified group' });
+                }
+            } else {
+                searchConditions.$or = [
+                    { name: { $regex: searchQuery, $options: 'i' } },
+                    { email: { $regex: searchQuery, $options: 'i' } }
+                ];
+            }
+        }
 
-      const users = await User.find(searchConditions).populate('groups', 'name');
+        const users = await User.find(searchConditions).populate('groups', 'name');
 
-      if (!users.length) {
-          return res.status(404).json({ error: 'No users found' });
-      }
+        if (!users.length) {
+            return res.status(404).json({ error: 'No users found' });
+        }
 
-      // Create Excel workbook
-      const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet('Users');
+        // Create Excel workbook
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Users');
 
-      // Add headers
-      worksheet.addRow([
-          'Name', 'Email', 'Status', 'IC Number', 'Total Storage', 'Used Storage', 
-          'Total Token', 'Used Token', 'Distributed Token', 'Groups'
-      ]);
+        // Add headers
+        worksheet.addRow([
+            'Name', 'Email', 'Status', 'IC Number', 'Total Storage', 'Used Storage',
+            'Total Token', 'Used Token', 'Distributed Token', 'Groups'
+        ]);
 
-      // Add user data
-      users.forEach(user => {
-          worksheet.addRow([
-              user.name, 
-              user.email, 
-              user.status === 1 ? 'Active' : user.status === 0 ? 'Not Active' : 'Suspended',
-              user.ICNumber || 'N/A',
-              user.totalStorage,
-              user.usedStorage,
-              user.totalToken,
-              user.usedToken,
-              user.distributedToken,
-              user.groups.map(g => g.name).join(', ')
-          ]);
-      });
+        // Add user data
+        users.forEach(user => {
+            worksheet.addRow([
+                user.name,
+                user.email,
+                user.status === 1 ? 'Active' : user.status === 0 ? 'Not Active' : 'Suspended',
+                user.ICNumber || 'N/A',
+                user.totalStorage,
+                user.usedStorage,
+                user.totalToken,
+                user.usedToken,
+                user.distributedToken,
+                user.groups.map(g => g.name).join(', ')
+            ]);
+        });
 
-      // Set response headers for file download
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', 'attachment; filename=users.xlsx');
+        // Set response headers for file download
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename=users.xlsx');
 
-      // Send the file as a stream
-      await workbook.xlsx.write(res);
-      res.end();
-  } catch (error) {
-      console.error('Error generating Excel:', error);
-      res.status(500).json({ error: 'Internal Server Error' });
-  }
+        // Send the file as a stream
+        await workbook.xlsx.write(res);
+        res.end();
+    } catch (error) {
+        console.error('Error generating Excel:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
 });
 
 // Get User by ID
@@ -355,6 +355,34 @@ userRouter.put('/:id', authMiddleware, async (req, res) => {
         // session.endSession();
 
         res.status(200).json({ message: 'User updated successfully', user: existingUser });
+
+    } catch (error) {
+        // await session.abortTransaction();
+        // session.endSession();
+        res.status(400).json({ error: error.message });
+    }
+});
+
+// Update User by ID
+userRouter.put('/:id/theme', authMiddleware, async (req, res) => {
+    const { theme } = req.body;
+
+    try {
+        const tenantId = req.tenantId
+        const userId = req.params.id;
+
+        const existingUser = await User.findByIdAndUpdate(
+            userId,  // ✅ Remove `{}` around userId
+            { theme: theme },
+            { new: true }  // ✅ Returns the updated document
+        );
+
+        if (!existingUser) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        const updatedUser = await existingUser.save();
+
+        res.status(200).json({ message: 'User Theme updated successfully', user: updatedUser });
 
     } catch (error) {
         // await session.abortTransaction();
@@ -458,150 +486,150 @@ userRouter.post("/bulk-add", authMiddleware, upload.single("file"), async (req, 
         res.status(201).json({ message: "Users uploaded successfully", users: savedUsers });
     } catch (error) {
         console.error("Error processing Excel file:", error);
-        res.status(500).json({ error: "Error processing file " + error});
+        res.status(500).json({ error: "Error processing file " + error });
     }
-  });
+});
 
 userRouter.post("/bulk-update", upload.single("file"), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ message: "No file uploaded" });
-  }
-
-  const tenantId = req.tenantId; // Assuming tenantId is passed in headers
-  if (!tenantId) {
-    return res.status(400).json({ error: "Please include tenant in the header" });
-  }
-
-  try {
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(req.file.buffer);
-    const worksheet = workbook.worksheets[0]; // First sheet
-
-    if (!worksheet) {
-      return res.status(400).json({ message: "No sheets found in the Excel file" });
+    if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
     }
 
-    // Extract headers
-    const headers = worksheet.getRow(1).values.slice(1); // Skip empty first index
-
-    // Expected headers for bulk update
-    const expectedHeaders = ["Name", "Email", "Status", "Role", "IC Number", "Start Date", "End Date"];
-    const missingHeaders = expectedHeaders.filter(h => !headers.includes(h));
-    if (missingHeaders.length > 0) {
-      return res.status(400).json({ error: `Missing columns: ${missingHeaders.join(", ")}` });
+    const tenantId = req.tenantId; // Assuming tenantId is passed in headers
+    if (!tenantId) {
+        return res.status(400).json({ error: "Please include tenant in the header" });
     }
 
-    // Process user updates
-    const updatePromises = [];
+    try {
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(req.file.buffer);
+        const worksheet = workbook.worksheets[0]; // First sheet
 
-    for (let i = 2; i <= worksheet.rowCount; i++) {
-      const row = worksheet.getRow(i);
-      const icNumber = row.getCell(headers.indexOf("IC Number") + 1).value;
-      const name = row.getCell(headers.indexOf("Name") + 1).value;
-      const email = row.getCell(headers.indexOf("Email") + 1).value;
-      const rawStatus = row.getCell(headers.indexOf("Status") + 1).value || "Not Active";
-      const roleCode = row.getCell(headers.indexOf("Role") + 1).value;
-      const startDate = row.getCell(headers.indexOf("Start Date") + 1).value;
-      const endDate = row.getCell(headers.indexOf("End Date") + 1).value;
+        if (!worksheet) {
+            return res.status(400).json({ message: "No sheets found in the Excel file" });
+        }
 
-      // Validate required fields
-      if (!icNumber) {
-        return res.status(400).json({ error: `Row ${i}: Missing IC Number (required for update)` });
-      }
+        // Extract headers
+        const headers = worksheet.getRow(1).values.slice(1); // Skip empty first index
 
-      // Validate role
-      const role = await Role.findOne({ code: roleCode.toUpperCase(), tenantId });
-      if (!role) {
-        return res.status(400).json({ error: `Row ${i}: Role '${roleCode}' not found for this tenant` });
-      }
+        // Expected headers for bulk update
+        const expectedHeaders = ["Name", "Email", "Status", "Role", "IC Number", "Start Date", "End Date"];
+        const missingHeaders = expectedHeaders.filter(h => !headers.includes(h));
+        if (missingHeaders.length > 0) {
+            return res.status(400).json({ error: `Missing columns: ${missingHeaders.join(", ")}` });
+        }
 
-      let status;
-      if (rawStatus === "Active") {
-        status = 1;
-      } else if (rawStatus === "Not Active") {
-        status = 0;
-      } else {
-        return res.status(400).json({ error: `Row ${i}: Status '${rawStatus}' is invalid. Use 'Active' or 'Not Active'.` });
-      }
+        // Process user updates
+        const updatePromises = [];
 
-      // Find user by Email
-      const user = await User.findOne({ email: email.toLowerCase(), tenantId });
-      if (!user) {
-        return res.status(400).json({ error: `Row ${i}: No user found with email '${email}'` });
-      }
+        for (let i = 2; i <= worksheet.rowCount; i++) {
+            const row = worksheet.getRow(i);
+            const icNumber = row.getCell(headers.indexOf("IC Number") + 1).value;
+            const name = row.getCell(headers.indexOf("Name") + 1).value;
+            const email = row.getCell(headers.indexOf("Email") + 1).value;
+            const rawStatus = row.getCell(headers.indexOf("Status") + 1).value || "Not Active";
+            const roleCode = row.getCell(headers.indexOf("Role") + 1).value;
+            const startDate = row.getCell(headers.indexOf("Start Date") + 1).value;
+            const endDate = row.getCell(headers.indexOf("End Date") + 1).value;
 
-      // Prepare update object
-      const updateData = {
-        name,
-        email,
-        status,
-        ICNumber: icNumber,
-        role: role._id,
-        startDate: startDate ? new Date(startDate) : null,
-        endDate: endDate ? new Date(endDate) : null
-      };
+            // Validate required fields
+            if (!icNumber) {
+                return res.status(400).json({ error: `Row ${i}: Missing IC Number (required for update)` });
+            }
 
-      // Push update promise
-      updatePromises.push(User.updateOne({ _id: user._id }, { $set: updateData }));
+            // Validate role
+            const role = await Role.findOne({ code: roleCode.toUpperCase(), tenantId });
+            if (!role) {
+                return res.status(400).json({ error: `Row ${i}: Role '${roleCode}' not found for this tenant` });
+            }
+
+            let status;
+            if (rawStatus === "Active") {
+                status = 1;
+            } else if (rawStatus === "Not Active") {
+                status = 0;
+            } else {
+                return res.status(400).json({ error: `Row ${i}: Status '${rawStatus}' is invalid. Use 'Active' or 'Not Active'.` });
+            }
+
+            // Find user by Email
+            const user = await User.findOne({ email: email.toLowerCase(), tenantId });
+            if (!user) {
+                return res.status(400).json({ error: `Row ${i}: No user found with email '${email}'` });
+            }
+
+            // Prepare update object
+            const updateData = {
+                name,
+                email,
+                status,
+                ICNumber: icNumber,
+                role: role._id,
+                startDate: startDate ? new Date(startDate) : null,
+                endDate: endDate ? new Date(endDate) : null
+            };
+
+            // Push update promise
+            updatePromises.push(User.updateOne({ _id: user._id }, { $set: updateData }));
+        }
+
+        // Execute all updates in parallel
+        await Promise.all(updatePromises);
+
+        res.status(200).json({ message: "Users updated successfully" });
+    } catch (error) {
+        console.error("Error processing Excel file:", error);
+        res.status(500).json({ error: "Error processing file" });
     }
-
-    // Execute all updates in parallel
-    await Promise.all(updatePromises);
-
-    res.status(200).json({ message: "Users updated successfully" });
-  } catch (error) {
-    console.error("Error processing Excel file:", error);
-    res.status(500).json({ error: "Error processing file" });
-  }
 });
 
 userRouter.post('/bulk-delete', upload.single('file'), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ message: 'No file uploaded' });
-  }
-
-  const tenantId = req.tenantId; // Assuming tenantId is passed in headers
-  if (!tenantId) {
-    return res.status(400).json({ error: 'Please include tenant in the header' });
-  }
-
-  try {
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(req.file.buffer);
-    const worksheet = workbook.worksheets[0]; // First sheet
-
-    if (!worksheet) {
-      return res.status(400).json({ message: 'No sheets found in the Excel file' });
+    if (!req.file) {
+        return res.status(400).json({ message: 'No file uploaded' });
     }
 
-    // Extract emails from column A, starting from the second row
-    const emailsToDelete = [];
-    worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber > 1) { // Skip header row
-        const email = row.getCell(1).text.trim();
-        if (email) {
-          emailsToDelete.push(email.toLowerCase());
+    const tenantId = req.tenantId; // Assuming tenantId is passed in headers
+    if (!tenantId) {
+        return res.status(400).json({ error: 'Please include tenant in the header' });
+    }
+
+    try {
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(req.file.buffer);
+        const worksheet = workbook.worksheets[0]; // First sheet
+
+        if (!worksheet) {
+            return res.status(400).json({ message: 'No sheets found in the Excel file' });
         }
-      }
-    });
 
-    if (emailsToDelete.length === 0) {
-      return res.status(400).json({ message: 'No emails found in the file' });
+        // Extract emails from column A, starting from the second row
+        const emailsToDelete = [];
+        worksheet.eachRow((row, rowNumber) => {
+            if (rowNumber > 1) { // Skip header row
+                const email = row.getCell(1).text.trim();
+                if (email) {
+                    emailsToDelete.push(email.toLowerCase());
+                }
+            }
+        });
+
+        if (emailsToDelete.length === 0) {
+            return res.status(400).json({ message: 'No emails found in the file' });
+        }
+
+        // Delete users matching the emails and tenantId
+        const deleteResult = await User.deleteMany({
+            email: { $in: emailsToDelete },
+            tenantId
+        });
+
+        res.status(200).json({
+            message: `${deleteResult.deletedCount} user(s) deleted successfully`
+        });
+    } catch (error) {
+        console.error('Error processing Excel file:', error);
+        res.status(500).json({ error: 'Error processing file' });
     }
-
-    // Delete users matching the emails and tenantId
-    const deleteResult = await User.deleteMany({
-      email: { $in: emailsToDelete },
-      tenantId
-    });
-
-    res.status(200).json({
-      message: `${deleteResult.deletedCount} user(s) deleted successfully`
-    });
-  } catch (error) {
-    console.error('Error processing Excel file:', error);
-    res.status(500).json({ error: 'Error processing file' });
-  }
 });
 
 
