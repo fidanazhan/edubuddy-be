@@ -1,5 +1,6 @@
 const express = require('express');
 const Config = require('../models/Config');
+const SuggestionQuestion = require('../models/SuggestionQuestion');
 const configRoute = express.Router();
 const tenantIdentifier = require("../middleware/tenantIdentifier")
 // BELOW
@@ -275,5 +276,20 @@ configRoute.delete('/:id', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
+configRoute.post("/", async (req, res) => {
+    try {
+      const { question, tenantId } = req.body;
+      if (!question || !tenantId) {
+        return res.status(400).json({ message: "Question and tenantId are required" });
+      }
+  
+      const newQuestion = new SuggestionQuestion({ question, tenantId });
+      await newQuestion.save();
+      res.status(201).json(newQuestion);
+    } catch (error) {
+      res.status(500).json({ message: "Error adding question", error });
+    }
+  });
 
 module.exports = configRoute;
