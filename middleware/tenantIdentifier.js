@@ -5,6 +5,10 @@ const tenantIdentifier = async (req, res, next) => {
     
     const subdomain = req.headers['x-tenant'];
 
+    // if(!subdomain){
+    //   return res.status(404).json({ error: 'Please include tenant on the header.' });
+    // }
+
     // If no subdomain is provided, assume superadmin
     if (!subdomain) {
       req.tenantId = null;
@@ -14,7 +18,7 @@ const tenantIdentifier = async (req, res, next) => {
 
     const tenant = await Tenant.findOne({ subdomain: subdomain.toLowerCase() });
     if (!tenant) {
-      return res.status(404).json({ error: 'Tenant not found' });
+      return res.status(404).json({ error: 'Tenant not found.' });
     }
 
     req.tenantId = tenant._id;  
