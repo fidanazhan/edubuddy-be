@@ -363,7 +363,7 @@ userRouter.put('/:id', authMiddleware, async (req, res) => {
     }
 });
 
-// Update User by ID
+// Update User's theme by ID
 userRouter.put('/:id/theme', authMiddleware, async (req, res) => {
     const { theme } = req.body;
 
@@ -383,6 +383,34 @@ userRouter.put('/:id/theme', authMiddleware, async (req, res) => {
         const updatedUser = await existingUser.save();
 
         res.status(200).json({ message: 'User Theme updated successfully', user: updatedUser });
+
+    } catch (error) {
+        // await session.abortTransaction();
+        // session.endSession();
+        res.status(400).json({ error: error.message });
+    }
+});
+
+// Update User's language by ID
+userRouter.put('/:id/lang', authMiddleware, async (req, res) => {
+    const { lang } = req.body;
+
+    try {
+        const tenantId = req.tenantId
+        const userId = req.params.id;
+
+        const existingUser = await User.findByIdAndUpdate(
+            userId,  // ✅ Remove `{}` around userId
+            { language: lang },
+            { new: true }  // ✅ Returns the updated document
+        );
+
+        if (!existingUser) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        const updatedUser = await existingUser.save();
+
+        res.status(200).json({ message: 'User Language updated successfully', user: updatedUser });
 
     } catch (error) {
         // await session.abortTransaction();
