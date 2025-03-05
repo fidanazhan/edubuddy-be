@@ -9,7 +9,7 @@ const userSchema = new mongoose.Schema({
   modifiedBy: { type: String },
   role: { type: mongoose.Schema.Types.ObjectId, ref: 'Role' },
   refreshToken: { type: String },
-  ICNumber: {type: Number },
+  ICNumber: { type: Number },
   status: { type: Number }, // 0 - Not Active, 1 - Active, 2 - Suspend
   profilePictureUrl: { type: String },
   totalStorage: { type: Number, default: 0 },
@@ -20,7 +20,9 @@ const userSchema = new mongoose.Schema({
   totalToken: { type: Number, default: 0 },
   usedToken: { type: Number, default: 0 },
   distributedToken: { type: Number, default: 0 },
+  distributedStorage: { type: Number, default: 0 },
   theme: { type: String, enum: ["light", "dark"], default: "light" },
+  language: { type: String, enum: ["en", "malay"], default: "en" }
 }, { timestamps: true });
 
 // Create indexes
