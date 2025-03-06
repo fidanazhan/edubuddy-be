@@ -76,59 +76,6 @@ fileRouter.get("/", authMiddleware, async (req, res) => {
   }
 });
 
-
-// Upload file
-// fileRouter.post("/upload", authMiddleware, upload.array("files", 5), async (req, res) => {
-
-//   const userId = req.decodedJWT.id;
-//   const userEmail = req.decodedJWT.email;  
-//   const tenantId = req.tenantId;
-
-//   try {
-//     if (!req.files || req.files.length === 0) {
-//       return res.status(400).json({ message: "No files uploaded" });
-//     }
-
-//     const tag = Array.isArray(req.body.tag) ? req.body.tag[0] : req.body.tag;
-
-//     // Process all files before saving
-//     const uploadedFiles = await Promise.all(
-//       req.files.map(async (file) => {
-//         const uniqueFileName = `${Date.now()}-${file.originalname}`;
-//         const filePath = `${tenantId}/${userEmail}/${uniqueFileName}`;
-
-//         const uploadParams = {
-//           Bucket: process.env.DO_SPACES_BUCKET,
-//           Key: filePath,
-//           Body: file.buffer,
-//           ContentType: file.mimetype,
-//           ACL: "public-read",
-//         };
-
-//         await s3.send(new PutObjectCommand(uploadParams));
-
-//         return {
-//           originalName: file.originalname,
-//           storedName: filePath,
-//           tag: tag, // Assign the single tag to all files
-//           url: `${process.env.DO_SPACES_ENDPOINT}/${process.env.DO_SPACES_BUCKET}/${uniqueFileName}`,
-//           type: file.mimetype,
-//           size: file.size,
-//           tenantId: req.tenantId,
-//           uploadedBy: userId,
-//         };
-//       })
-//     );
-
-//     // Save all files at once (bulk insert)
-//     await File.insertMany(uploadedFiles);
-
-//     res.status(201).json({ message: "Files uploaded successfully", files: uploadedFiles });
-//   } catch (error) {
-//     res.status(500).json({ message: "Upload failed", error: error.message });
-//   }
-// });
-
 // Delete file
 fileRouter.delete("/delete/:id", async (req, res) => {
   try {
