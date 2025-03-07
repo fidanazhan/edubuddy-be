@@ -22,7 +22,7 @@ const userSchema = new mongoose.Schema({
   distributedToken: { type: Number, default: 0 },
   distributedStorage: { type: Number, default: 0 },
   theme: { type: String, enum: ["light", "dark"], default: "light" },
-  language: { type: String, enum: ["en", "malay"], default: "en" }
+  language: { type: String, enum: ["English", "Malaysia"], default: "English" }
 }, { timestamps: true });
 
 // Create indexes
