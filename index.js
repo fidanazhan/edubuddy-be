@@ -53,7 +53,7 @@ app.use('/api/auth', authRoute);
 app.use('/api/role', roleRoute);
 app.use('/api/permission', permissionRoute)
 app.use('/api', passportRoute)
-app.use('/api/chat', chatRoute)
+app.use('/api/chats', chatRoute)
 app.use('/api/group', groupRoute)
 app.use('/api/file', fileRoute)
 app.use('/api/config', configRoute)
