@@ -36,28 +36,25 @@ tenantRouter.get('/', authMiddleware, rbacMiddleware(['manage_tenant', 'view_ten
   }
 });
 
+// Get Tenant by subdomain
+tenantRouter.get('/exist', async (req, res) => {
+  // console.log("Check Existing tenant")
+  try {
+    const tenant = await Tenant.findOne({ _id : req.tenantId });
+    if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+    const config = await Config.findOne({ tenantId: tenant._id })
+    res.status(200).json(config);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get Tenant by ID
 tenantRouter.get('/:id', authMiddleware, rbacMiddleware(['manage_tenant', 'view_tenant']), async (req, res) => {
   try {
     const tenant = await Tenant.findById(req.params.id);
     if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
     res.json(tenant);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get Tenant by subdomain
-tenantRouter.get('/exist', authMiddleware, rbacMiddleware(['manage_tenant', 'view_tenant']), async (req, res) => {
-  try {
-    const { subdomain } = req.query;
-    // if (!subdomain) {
-    //   return res.status(400).json({ error: 'Subdomain is required' });
-    // }
-    const tenant = await Tenant.findOne({ subdomain });
-    if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
-    const config = await Config.findOne({ tenantId: tenant._id })
-    res.status(200).json({ tenant, config });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
