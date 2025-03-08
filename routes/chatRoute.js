@@ -1,6 +1,6 @@
 const express = require("express");
-const Chat = require('../models/Chat.js'); 
-const UserChat = require ("../models/UserChat.js");
+const Chat = require('../models/Chat.js');
+const UserChat = require("../models/UserChat.js");
 const authMiddleware = require("../middleware/authMiddleware")
 
 const chatRoute = express.Router();
@@ -10,6 +10,89 @@ const {
   HarmCategory,
   SchemaType,
 } = require("@google/generative-ai");
+
+chatRoute.post("/", authMiddleware, async (req, res) => {
+  const userId = req.decodedJWT.id;
+  const { text } = req.body;
+  console.log("1")
+  // console.log(req.body)
+  try {
+    // Create new chat
+    console.log("Inserting User Question 1")
+    const newChat = new Chat({
+      userId: userId,
+      history: [{ role: "user", parts: [{ text }] }],
+    });
+    // Save the new chat to the database
+    const savedChat = await newChat.save();
+    // Respond with the chatId in the response body
+
+    // CHECK IF THE USERCHATS EXISTS
+    const userChats = await UserChat.find({ userId: userId });
+
+    // IF DOESN'T EXIST CREATE A NEW ONE AND ADD THE CHAT IN THE CHATS ARRAY
+    if (!userChats.length) {
+      const newUserChats = new UserChat({
+        userId: userId,
+        chats: [
+          {
+            _id: savedChat._id,
+            title: text.substring(0, 40),
+          },
+        ],
+      });
+
+      await newUserChats.save();
+    } else {
+      // IF EXISTS, PUSH THE CHAT TO THE EXISTING ARRAY
+      await UserChat.updateOne(
+        { userId: userId },
+        {
+          $push: {
+            chats: {
+              _id: savedChat._id,
+              title: text.substring(0, 40),
+            },
+          },
+        }
+      );
+    }
+
+    res.status(201).send({ chatId: savedChat._id });
+  } catch (err) {
+    console.log(err);
+    res.status(500).send("Error creating chat!");
+  }
+});
+
+
+chatRoute.get("/userchats", authMiddleware, async (req, res) => {
+  const userId = req.decodedJWT.id;
+  console.log("Getting user's chats")
+  try {
+    const userChats = await UserChat.find({ userId });
+    console.log(userChats)
+    res.status(200).send(userChats[0].chats);
+  } catch (err) {
+    console.log(err);
+    res.status(500).send("Error fetching userchats!");
+  }
+});
+
+
+chatRoute.get("/:id", authMiddleware, async (req, res) => {
+  const userId = req.decodedJWT.id;
+  console.log("2")
+  try {
+    const chat = await Chat.findOne({ _id: req.params.id, userId });
+    // console.log(chat)
+    res.status(200).send(chat);
+  } catch (err) {
+    console.log(err);
+    res.status(500).send("Error fetching chat!");
+  }
+});
+
 
 const safetySetting = [
   {
@@ -78,8 +161,11 @@ const model_chat_answer = async (data, modelChosen, text, imgai, res) => {
 
 chatRoute.put("/:id", authMiddleware, async (req, res) => {
   const userId = req.decodedJWT.id;
-  const { question, imgdb, imgai } = req.body;
-
+  const { imgdb, imgai } = req.body;
+  console.log("3")
+  // console.log(req.body)
+  const question = req.body.question
+  console.log(question)
   try {
     if (!question) {
       return res.status(400).send("Question is required!");
@@ -97,11 +183,13 @@ chatRoute.put("/:id", authMiddleware, async (req, res) => {
       parts: [{ text: question }],
       ...(imgdb && { imgdb }),
     };
-
-    await Chat.updateOne(
-      { _id: req.params.id, userId },
-      { $push: { history: userMessage } }
-    );
+    if (chat.history.length > 1) {
+      console.log("Inserting User Question 2")
+      await Chat.updateOne(
+        { _id: req.params.id, userId },
+        { $push: { history: userMessage } }
+      );
+    }
 
     console.log("User message saved:", userMessage);
 
@@ -116,193 +204,27 @@ chatRoute.put("/:id", authMiddleware, async (req, res) => {
       }
       return;
     }
-
     // Ensure we got an actual response from the model
     if (!modelResponseText || typeof modelResponseText !== "string") {
       console.warn("AI response is missing or invalid:", modelResponseText);
       modelResponseText = "No response from AI";
     }
-
     // Save the AI response
     const modelMessage = {
       role: "model",
       parts: [{ text: modelResponseText }],
     };
-
     await Chat.updateOne(
       { _id: req.params.id, userId },
       { $push: { history: modelMessage } }
     );
-
     console.log("AI response saved:", modelMessage);
   } catch (err) {
     console.error("Unexpected error:", err);
-
     if (!res.headersSent) {
       res.status(500).send("Error updating chat!");
     }
   }
 });
-
-
-// chatRoute.post("/", authMiddleware, async (req, res) => {
-//   const userId = req.decodedJWT.id;
-//   const { text } = req.body;
-
-//   try {
-//     // CREATE A NEW CHAT
-//     const newChat = new Chat({
-//       userId: userId,
-//       history: [{ role: "user", parts: [{ text }] }],
-//     });
-
-//     const savedChat = await newChat.save();
-
-//     // CHECK IF THE USERCHATS EXISTS
-//     const userChats = await UserChat.find({ userId: userId });
-
-//     // Streaming model answer
-//     await model_chat_answer(savedChat, "gemini-2.0-flash", text, null, res);
-
-//     // Optionally, save the chat with model response to the database after the stream
-//     const modelResponse = "streaming result"; // This could be accumulated text or result
-//     await Chat.updateOne(
-//       { _id: savedChat._id, userId },
-//       {
-//         $push: {
-//           history: {
-//             role: "model",
-//             parts: [{ text: modelResponse }],
-//           },
-//         },
-//       }
-//     );
-
-//     // Update the UserChats if needed
-//     if (!userChats.length) {
-//       const newUserChats = new UserChat({
-//         userId: userId,
-//         chats: [
-//           {
-//             _id: savedChat._id,
-//             title: text.substring(0, 40),
-//           },
-//         ],
-//       });
-
-//       await newUserChats.save();
-//     } else {
-//       await UserChat.updateOne(
-//         { userId: userId },
-//         {
-//           $push: {
-//             chats: {
-//               _id: savedChat._id,
-//               title: text.substring(0, 40),
-//             },
-//           },
-//         }
-//       );
-//     }
-
-//   } catch (err) {
-//     console.log(err);
-//     res.status(500).send("Error creating chat!");
-//   }
-// });
-
-
-chatRoute.post("/", authMiddleware, async (req, res) => {
-  const userId = req.decodedJWT.id;
-  const { text } = req.body;
-
-  try {
-    // Create new chat
-    const newChat = new Chat({
-      userId: userId,
-      history: [{ role: "user", parts: [{ text }] }],
-    });
-
-    // Save the new chat to the database
-    const savedChat = await newChat.save();
-
-    // Respond with the chatId in the response body
-    res.status(201).send({ chatId: savedChat._id });
-  } catch (err) {
-    console.log(err);
-    res.status(500).send("Error creating chat!");
-  }
-});
-
-
-chatRoute.get("/userchats", authMiddleware, async (req, res) => {
-  const userId = req.decodedJWT.id;
-
-  try {
-    const userChats = await UserChat.find({ userId });
-
-    res.status(200).send(userChats[0].chats);
-  } catch (err) {
-    console.log(err);
-    res.status(500).send("Error fetching userchats!");
-  }
-});
-
-
-chatRoute.get("/:id", authMiddleware, async (req, res) => {
-  const userId = req.decodedJWT.id;
-
-  try {
-    const chat = await Chat.findOne({ _id: req.params.id, userId });
-
-    res.status(200).send(chat);
-  } catch (err) {
-    console.log(err);
-    res.status(500).send("Error fetching chat!");
-  }
-});
-
-const model_chat_answer2 = async (data, modelChosen, text, imgai, res) => {
-  try {
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_PUBLIC_KEY);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      safetySetting,
-      generationConfig: {
-        response_mime_type: "application/json",
-        response_schema: SchemaType.OBJECT,
-      },
-    });
-    // console.log(data)
-    const chat = model.startChat({
-      history: data?.history?.map(({ role, parts }) => {
-        if (role && parts?.[0]?.text) {
-          return {
-            role,
-            parts: [{ text: parts[0].text }],
-          };
-        }
-        return null; // Skip invalid entries
-      }).filter(Boolean), // Remove invalid entries
-      generationConfig: {
-        // maxOutputTokens: 100,
-      },
-    });
-    // let accumulatedText = "";
-
-    try {
-      const result = await chat.sendMessage(
-        [text]
-      );
-      return result;
-    } catch (err) {
-      console.log(err);
-    }
-    return "ERROR";
-  } catch (error) {
-    console.error("Error creating model:", error);
-    throw error; // Re-throw the error to be handled by the caller
-  }
-};
 
 module.exports = chatRoute;
