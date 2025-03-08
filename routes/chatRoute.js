@@ -81,46 +81,68 @@ chatRoute.put("/:id", authMiddleware, async (req, res) => {
   const { question, imgdb, imgai } = req.body;
 
   try {
-    // 🔹 Fetch the existing chat, ensuring it belongs to the authenticated user
-    const chat = await Chat.findOne({ _id: req.params.id, userId });
-    if (!chat) return res.status(404).send("Chat not found!");
+    if (!question) {
+      return res.status(400).send("Question is required!");
+    }
 
-    // 🔹 Prepare user message
+    const chat = await Chat.findOne({ _id: req.params.id, userId });
+
+    if (!chat) {
+      return res.status(404).send("Chat not found!");
+    }
+
+    // Save the user message first
     const userMessage = {
       role: "user",
       parts: [{ text: question }],
-      ...(imgdb && { imgdb }), // Include imgdb if provided
+      ...(imgdb && { imgdb }),
     };
 
-    // 🔹 Push user message to history first
     await Chat.updateOne(
       { _id: req.params.id, userId },
       { $push: { history: userMessage } }
     );
 
-    // 🔹 Stream model response (This function should handle the response)
-    await model_chat_answer(chat, "gemini-2.0-flash", question, imgai, res);
+    console.log("User message saved:", userMessage);
 
-    // 🔹 After streaming, update database with AI response
-    // ❌ Do NOT use res.send() or res.end() after this
-    const modelResponse = "streaming result"; // Replace with actual streamed result
-    const modelMessage = { role: "model", parts: [{ text: modelResponse }] };
+    // Capture the AI response
+    let modelResponseText = "";
+    try {
+      modelResponseText = await model_chat_answer(chat, "gemini-2.0-flash", question, imgai, res);
+    } catch (error) {
+      console.error("Error calling model_chat_answer:", error);
+      if (!res.headersSent) {
+        return res.status(500).send("Error processing AI response");
+      }
+      return;
+    }
+
+    // Ensure we got an actual response from the model
+    if (!modelResponseText || typeof modelResponseText !== "string") {
+      console.warn("AI response is missing or invalid:", modelResponseText);
+      modelResponseText = "No response from AI";
+    }
+
+    // Save the AI response
+    const modelMessage = {
+      role: "model",
+      parts: [{ text: modelResponseText }],
+    };
 
     await Chat.updateOne(
       { _id: req.params.id, userId },
       { $push: { history: modelMessage } }
     );
 
+    console.log("AI response saved:", modelMessage);
   } catch (err) {
-    console.log(err);
+    console.error("Unexpected error:", err);
 
-    // ❌ Ensure we only send a response if it hasn't been sent by streaming
     if (!res.headersSent) {
       res.status(500).send("Error updating chat!");
     }
   }
 });
-
 
 
 // chatRoute.post("/", authMiddleware, async (req, res) => {
