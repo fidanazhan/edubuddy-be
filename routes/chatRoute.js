@@ -68,10 +68,10 @@ chatRoute.post("/", authMiddleware, async (req, res) => {
 
 chatRoute.get("/userchats", authMiddleware, async (req, res) => {
   const userId = req.decodedJWT.id;
-  console.log("Getting user's chats")
+  // console.log("Getting user's chats")
   try {
     const userChats = await UserChat.find({ userId });
-    console.log(userChats)
+    // console.log(userChats)
     res.status(200).send(userChats[0].chats);
   } catch (err) {
     console.log(err);
@@ -85,7 +85,7 @@ chatRoute.get("/:id", authMiddleware, async (req, res) => {
   console.log("2")
   try {
     const chat = await Chat.findOne({ _id: req.params.id, userId });
-    // console.log(chat)
+    if (!chat) return res.status(404).send({ error: "Chat did not exist" });
     res.status(200).send(chat);
   } catch (err) {
     console.log(err);
@@ -226,5 +226,30 @@ chatRoute.put("/:id", authMiddleware, async (req, res) => {
     }
   }
 });
+
+chatRoute.delete("/:id", authMiddleware, async (req, res) => {
+  const userId = req.decodedJWT.id;
+  const chatId = req.params.id;
+  console.log(4)
+  console.log(chatId)
+  try {
+    // Delete chat from the Chat collection
+    const deletedChat = await Chat.deleteOne({ _id: chatId, userId });
+    // Remove chat reference from UserChat
+    const updatedUserChat = await UserChat.findOneAndUpdate(
+      { userId }, // Correct filter to match the user
+      { $pull: { chats: { _id: chatId } } } // Correctly remove the chat from array
+    );
+    console.log("Chat deleted");
+    console.log(updatedUserChat)
+    res.status(200).send(updatedUserChat.chats);
+  } catch (err) {
+    console.error("Unexpected error:", err);
+    if (!res.headersSent) {
+      res.status(500).send("Error deleting chat!");
+    }
+  }
+});
+
 
 module.exports = chatRoute;
