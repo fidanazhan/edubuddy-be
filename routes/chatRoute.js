@@ -14,11 +14,11 @@ const {
 chatRoute.post("/", authMiddleware, async (req, res) => {
   const userId = req.decodedJWT.id;
   const { text } = req.body;
-  console.log("1")
+  console.log("1 Creating chat")
   // console.log(req.body)
   try {
     // Create new chat
-    console.log("Inserting User Question 1")
+    console.log("Inserting User Question")
     const newChat = new Chat({
       userId: userId,
       history: [{ role: "user", parts: [{ text }] }],
@@ -68,7 +68,7 @@ chatRoute.post("/", authMiddleware, async (req, res) => {
 
 chatRoute.get("/userchats", authMiddleware, async (req, res) => {
   const userId = req.decodedJWT.id;
-  // console.log("Getting user's chats")
+  console.log("3 Getting user's chats")
   try {
     const userChats = await UserChat.find({ userId });
     // console.log(userChats)
@@ -82,7 +82,7 @@ chatRoute.get("/userchats", authMiddleware, async (req, res) => {
 
 chatRoute.get("/:id", authMiddleware, async (req, res) => {
   const userId = req.decodedJWT.id;
-  console.log("2")
+  console.log("2 Get the chat based on id")
   try {
     const chat = await Chat.findOne({ _id: req.params.id, userId });
     if (!chat) return res.status(404).send({ error: "Chat did not exist" });
@@ -143,7 +143,7 @@ const model_chat_answer = async (data, modelChosen, text, imgai, res) => {
     for await (const chunk of result.stream) {
       const chunkText = chunk.text();
       accumulatedText += chunkText;
-      console.log(chunkText); // Log or process the chunk as needed
+      // console.log(chunkText); // Log or process the chunk as needed
 
       // Write the chunk to the response immediately
       res.write(chunkText);
@@ -162,10 +162,10 @@ const model_chat_answer = async (data, modelChosen, text, imgai, res) => {
 chatRoute.put("/:id", authMiddleware, async (req, res) => {
   const userId = req.decodedJWT.id;
   const { imgdb, imgai } = req.body;
-  console.log("3")
+  console.log("4 update chat")
   // console.log(req.body)
   const question = req.body.question
-  console.log(question)
+  console.log("question : " +  question)
   try {
     if (!question) {
       return res.status(400).send("Question is required!");
@@ -191,7 +191,7 @@ chatRoute.put("/:id", authMiddleware, async (req, res) => {
       );
     }
 
-    console.log("User message saved:", userMessage);
+    // console.log("User message saved:", userMessage);
 
     // Capture the AI response
     let modelResponseText = "";
@@ -218,7 +218,7 @@ chatRoute.put("/:id", authMiddleware, async (req, res) => {
       { _id: req.params.id, userId },
       { $push: { history: modelMessage } }
     );
-    console.log("AI response saved:", modelMessage);
+    // console.log("AI response saved:", modelMessage);
   } catch (err) {
     console.error("Unexpected error:", err);
     if (!res.headersSent) {
@@ -230,8 +230,8 @@ chatRoute.put("/:id", authMiddleware, async (req, res) => {
 chatRoute.delete("/:id", authMiddleware, async (req, res) => {
   const userId = req.decodedJWT.id;
   const chatId = req.params.id;
-  console.log(4)
-  console.log(chatId)
+  console.log("5 Delete chat")
+  // console.log(chatId)
   try {
     // Delete chat from the Chat collection
     const deletedChat = await Chat.deleteOne({ _id: chatId, userId });
@@ -241,7 +241,7 @@ chatRoute.delete("/:id", authMiddleware, async (req, res) => {
       { $pull: { chats: { _id: chatId } } } // Correctly remove the chat from array
     );
     console.log("Chat deleted");
-    console.log(updatedUserChat)
+    // console.log(updatedUserChat)
     res.status(200).send(updatedUserChat.chats);
   } catch (err) {
     console.error("Unexpected error:", err);
