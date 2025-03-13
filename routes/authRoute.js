@@ -85,6 +85,8 @@ authRoute.get(
                     }
                 })
 
+            console.log("req.query.state: " + req.query.state)
+            console.log(process.env.CLIENT_URL)
             const { subdomain } = JSON.parse(req.query.state); // Parse the state to get the subdomain
 
             if (user) {

@@ -28,9 +28,23 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
+// Get the allowed origins from environment variables
+let allowedOrigins = process.env.CORS_ALLOWED_ORIGINS
+  ? process.env.CORS_ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+  : [];
+
 let corsOptions = {
   origin: (origin, callback) => {
-    if (!origin || origin.endsWith('.localhost:5173') || origin === 'http://localhost:5173') {
+    // If no origin (for same-origin requests), allow it
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    // Check if the origin matches an allowed origin or is a subdomain of allowed origins
+    if (
+      allowedOrigins.some(allowedOrigin => origin === allowedOrigin) || // exact match
+      allowedOrigins.some(allowedOrigin => origin.endsWith('.' + allowedOrigin.split('://')[1])) // subdomain match
+    ) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
