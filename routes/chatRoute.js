@@ -65,20 +65,24 @@ chatRoute.post("/", authMiddleware, async (req, res) => {
   }
 });
 
-
 chatRoute.get("/userchats", authMiddleware, async (req, res) => {
   const userId = req.decodedJWT.id;
   console.log("3 Getting user's chats")
   try {
-    const userChats = await UserChat.find({ userId });
+    const userChats = await UserChat.findOne({ userId });
+
+    if (userChats) {
+      // console.log(userChats.chats)
+      userChats.chats.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    }
+
     // console.log(userChats)
-    res.status(200).send(userChats[0].chats);
+    res.status(200).send(userChats.chats);
   } catch (err) {
     console.log(err);
     res.status(500).send("Error fetching userchats!");
   }
 });
-
 
 chatRoute.get("/:id", authMiddleware, async (req, res) => {
   const userId = req.decodedJWT.id;
@@ -165,7 +169,7 @@ chatRoute.put("/:id", authMiddleware, async (req, res) => {
   console.log("4 update chat")
   // console.log(req.body)
   const question = req.body.question
-  console.log("question : " +  question)
+  console.log("question : " + question)
   try {
     if (!question) {
       return res.status(400).send("Question is required!");
@@ -219,6 +223,24 @@ chatRoute.put("/:id", authMiddleware, async (req, res) => {
       { $push: { history: modelMessage } }
     );
     // console.log("AI response saved:", modelMessage);
+
+    await UserChat.updateOne(
+      { userId, "chats._id": req.params.id },
+      { $set: { "chats.$.updatedAt": new Date() } }
+    );
+
+    await UserChat.updateOne(
+      { userId },
+      {
+        $push: {
+          chats: {
+            $each: [], // Keep existing elements
+            $sort: { updatedAt: -1 } // Sort by updatedAt (latest first)
+          }
+        }
+      }
+    );
+
   } catch (err) {
     console.error("Unexpected error:", err);
     if (!res.headersSent) {
