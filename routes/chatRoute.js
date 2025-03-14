@@ -65,6 +65,25 @@ chatRoute.post("/", authMiddleware, async (req, res) => {
   }
 });
 
+chatRoute.put("/:id/title", authMiddleware, async (req, res) => {
+  const userId = req.decodedJWT.id;
+  const { title } = req.body;
+  console.log("6 update chat title")
+  // console.log(req.body)
+  try {
+    await UserChat.updateOne(
+      { userId, "chats._id": req.params.id },
+      { $set: { "chats.$.title": title } }
+    );
+    res.status(200).send("Chat Title updated successfully.")
+  } catch (err) {
+    console.error("Unexpected error:", err);
+    if (!res.headersSent) {
+      res.status(500).send("Error updating chat title!");
+    }
+  }
+});
+
 chatRoute.get("/userchats", authMiddleware, async (req, res) => {
   const userId = req.decodedJWT.id;
   console.log("3 Getting user's chats")
@@ -72,8 +91,7 @@ chatRoute.get("/userchats", authMiddleware, async (req, res) => {
     const userChats = await UserChat.findOne({ userId });
 
     if (userChats) {
-      // console.log(userChats.chats)
-      userChats.chats.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      userChats.chats.sort((a, b) => b.updatedAt - a.updatedAt);
     }
 
     // console.log(userChats)
@@ -227,18 +245,6 @@ chatRoute.put("/:id", authMiddleware, async (req, res) => {
     await UserChat.updateOne(
       { userId, "chats._id": req.params.id },
       { $set: { "chats.$.updatedAt": new Date() } }
-    );
-
-    await UserChat.updateOne(
-      { userId },
-      {
-        $push: {
-          chats: {
-            $each: [], // Keep existing elements
-            $sort: { updatedAt: -1 } // Sort by updatedAt (latest first)
-          }
-        }
-      }
     );
 
   } catch (err) {
