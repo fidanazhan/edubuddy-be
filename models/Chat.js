@@ -25,11 +25,14 @@ const chatSchema = new mongoose.Schema(
           type: String,
           required: false,
         },
+        tokens: {
+          type: Number,  // Stores token count for this message
+          required: false,
+        },
       },
     ],
   },
   { timestamps: true }
 );
 
-// Export the User model
-module.exports = mongoose.model('Chat', chatSchema);
+module.exports = mongoose.model("Chat", chatSchema);

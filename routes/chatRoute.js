@@ -1,7 +1,9 @@
 const express = require("express");
 const Chat = require('../models/Chat.js');
+const User = require('../models/User.js');
 const UserChat = require("../models/UserChat.js");
 const authMiddleware = require("../middleware/authMiddleware")
+const gptTokenizer = require('gpt-tokenizer');
 
 const chatRoute = express.Router();
 const {
@@ -154,9 +156,13 @@ const model_chat_answer = async (data, modelChosen, text, imgai, res) => {
       res.flush?.(); // Ensure immediate flush if supported
     }
 
+    // **Count Output Tokens**
+    const outputTokens = gptTokenizer.encode(accumulatedText).length;
+    console.log(`Output Tokens: ${outputTokens}`);
+
     // End the response once the streaming is complete
     res.end();
-    return accumulatedText; // Optional: Return the final accumulated text if needed
+    return { response: accumulatedText, outputTokens }; // Optional: Return the final accumulated text if needed
   } catch (error) {
     console.error("Error creating model:", error);
     throw error; // Re-throw the error to be handled by the caller
@@ -166,8 +172,6 @@ const model_chat_answer = async (data, modelChosen, text, imgai, res) => {
 chatRoute.put("/:id", authMiddleware, async (req, res) => {
   const userId = req.decodedJWT.id;
   const { imgdb, imgai } = req.body;
-  console.log("4 update chat")
-  // console.log(req.body)
   const question = req.body.question
   console.log("question : " + question)
   try {
@@ -181,12 +185,18 @@ chatRoute.put("/:id", authMiddleware, async (req, res) => {
       return res.status(404).send("Chat not found!");
     }
 
+    // **Estimate tokens for the user message**
+    const userMessageTokens = gptTokenizer.encode(question).length;
+    console.log("userMessageTokens: " + userMessageTokens)
+
     // Save the user message first
     const userMessage = {
       role: "user",
       parts: [{ text: question }],
       ...(imgdb && { imgdb }),
+      tokens: userMessageTokens, // Store tokens
     };
+
     if (chat.history.length > 1) {
       console.log("Inserting User Question 2")
       await Chat.updateOne(
@@ -195,12 +205,13 @@ chatRoute.put("/:id", authMiddleware, async (req, res) => {
       );
     }
 
-    // console.log("User message saved:", userMessage);
-
     // Capture the AI response
     let modelResponseText = "";
+    let modelTokens = ""
     try {
-      modelResponseText = await model_chat_answer(chat, "gemini-2.0-flash", question, imgai, res);
+      const result = await model_chat_answer(chat, "gemini-2.0-flash", question, imgai, res);
+      modelResponseText = result.response;
+      modelTokens = result.outputTokens;
     } catch (error) {
       console.error("Error calling model_chat_answer:", error);
       if (!res.headersSent) {
@@ -208,16 +219,18 @@ chatRoute.put("/:id", authMiddleware, async (req, res) => {
       }
       return;
     }
-    // Ensure we got an actual response from the model
     if (!modelResponseText || typeof modelResponseText !== "string") {
       console.warn("AI response is missing or invalid:", modelResponseText);
       modelResponseText = "No response from AI";
     }
+
     // Save the AI response
     const modelMessage = {
       role: "model",
       parts: [{ text: modelResponseText }],
+      tokens: modelTokens, // Store AI token count
     };
+    
     await Chat.updateOne(
       { _id: req.params.id, userId },
       { $push: { history: modelMessage } }
@@ -239,6 +252,15 @@ chatRoute.put("/:id", authMiddleware, async (req, res) => {
           }
         }
       }
+    );
+
+    // **Calculate total tokens used**
+    let totalToken = modelTokens + userMessageTokens;
+
+    // **Update User's totalToken (subtract used tokens)**
+    await User.updateOne(
+      { _id: userId },
+      { $inc: { totalToken: -totalToken } } // Subtract totalToken from user.totalToken
     );
 
   } catch (err) {
