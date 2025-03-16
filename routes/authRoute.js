@@ -117,11 +117,71 @@ authRoute.get(
     }
 );
 
-// Logout Route (Optional, to invalidate refresh tokens)
-// authRoute.post('/logout', (req, res) => {
-//     const { token } = req.body;
-//     refreshTokens = refreshTokens.filter(t => t !== token);
-//     res.json({ message: 'Logged out successfully' });
-// });
+// Microsoft Authentication
+authRoute.get('/microsoft', (req, res, next) => {
+    const subdomain = req.query.subdomain;
+    const state = JSON.stringify({ subdomain });
+    passport.authenticate('microsoft', { scope: ['openid', 'email', 'profile', "User.Read"], state: state })(req, res, next);
+});
+
+// Microsoft Callback
+authRoute.get(
+    "/microsoft/callback",
+    passport.authenticate("microsoft", {
+        session: false,
+        failureRedirect: "/login/failed"
+    }),
+    async (req, res) => {
+        handleOAuthCallback(req, res);
+    }
+);
+
+// Common OAuth Callback Handler
+async function handleOAuthCallback(req, res) {
+    try {
+        console.log("Req User: " + JSON.stringify(req.user));
+
+        const userEmail = req.user.email;
+        const user = await User.findOne({ email: userEmail })
+            .populate({
+                path: 'role',
+                select: 'name code permissions',
+                populate: {
+                    path: 'permissions',
+                    select: 'name code'
+                }
+            });
+
+        console.log("req.query.state: " + req.query.state);
+        console.log(process.env.CLIENT_URL);
+        const { subdomain } = JSON.parse(req.query.state);
+
+        if (user) {
+            const accessToken = generateToken(user, req.user);
+            const refreshToken = generateRefreshToken(user);
+
+            user.refreshToken = refreshToken;
+            user.profilePictureUrl = req.user.photo;
+            await user.save();
+
+            const clientURL = `${process.env.HYPERTEXT_TRANSFER_PROTOCOL}${subdomain}.${process.env.CLIENT_URL}/login`;
+            const redirectURL = `${clientURL}?accessToken=${accessToken}&refreshToken=${refreshToken}`;
+
+            return res.redirect(redirectURL);
+        }
+
+        if (!user) {
+            const clientURL = `${process.env.HYPERTEXT_TRANSFER_PROTOCOL}${subdomain}.${process.env.CLIENT_URL}/login`;
+            const redirectURL = `${clientURL}?error=User does not exist`;
+
+            return res.redirect(redirectURL);
+        }
+        
+    } catch (error) {
+        console.error("Error during OAuth callback:", error);
+        res.status(500).send("Internal Server Error");
+    }
+}
+
 
 module.exports = authRoute;

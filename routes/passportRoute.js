@@ -17,21 +17,6 @@ passportRoute.get("/login/failed", (req, res) => {
     res.status(401).json({error: true, message: "Log in failure"})
 })
 
-// passportRoute.get(
-//     "/google/callback",
-//     passport.authenticate("google", {
-//         session: false,
-//         failureRedirect: "/login/failed"
-//     }),
-//     (req, res) => {
-//         // Successful authentication
-//         console.log("Authenticated User:", req.user); // This is the user object from Google
-//         res.redirect(process.env.CLIENT_URL); // Redirect to your client
-//     }
-// );
-
-// passportRoute.get("/google", passport.authenticate("google", ["profile", "email"]));
-
 passportRoute.get("/logout", (req, res) => {
     req.logout();
     res.redirect("http://localhost:5173")
