@@ -98,6 +98,7 @@ authRoute.get(
                 await user.save();
 
                 const clientURL = `${process.env.HYPERTEXT_TRANSFER_PROTOCOL}${subdomain}.${process.env.CLIENT_URL}/login`;
+                // const clientURL = `${process.env.HYPERTEXT_TRANSFER_PROTOCOL}${process.env.CLIENT_URL}/login`;
                 const redirectURL = `${clientURL}?accessToken=${accessToken}&refreshToken=${refreshToken}`;
 
                 res.redirect(redirectURL);
@@ -105,6 +106,7 @@ authRoute.get(
             
             if (!user) {
                 const clientURL = `${process.env.HYPERTEXT_TRANSFER_PROTOCOL}${subdomain}.${process.env.CLIENT_URL}/login`;
+                // const clientURL = `${process.env.HYPERTEXT_TRANSFER_PROTOCOL}${process.env.CLIENT_URL}/login`;
                 const redirectURL = `${clientURL}?error=User does not exist`;
             
                 return res.redirect(redirectURL);
@@ -164,14 +166,16 @@ async function handleOAuthCallback(req, res) {
             user.profilePictureUrl = req.user.photo;
             await user.save();
 
-            const clientURL = `${process.env.HYPERTEXT_TRANSFER_PROTOCOL}${subdomain}.${process.env.CLIENT_URL}/login`;
+            // const clientURL = `${process.env.HYPERTEXT_TRANSFER_PROTOCOL}${subdomain}.${process.env.CLIENT_URL}/login`;
+            const clientURL = `${process.env.HYPERTEXT_TRANSFER_PROTOCOL}${process.env.CLIENT_URL}/login`;
             const redirectURL = `${clientURL}?accessToken=${accessToken}&refreshToken=${refreshToken}`;
 
             return res.redirect(redirectURL);
         }
 
         if (!user) {
-            const clientURL = `${process.env.HYPERTEXT_TRANSFER_PROTOCOL}${subdomain}.${process.env.CLIENT_URL}/login`;
+            // const clientURL = `${process.env.HYPERTEXT_TRANSFER_PROTOCOL}${subdomain}.${process.env.CLIENT_URL}/login`;
+            const clientURL = `${process.env.HYPERTEXT_TRANSFER_PROTOCOL}${process.env.CLIENT_URL}/login`;
             const redirectURL = `${clientURL}?error=User does not exist`;
 
             return res.redirect(redirectURL);

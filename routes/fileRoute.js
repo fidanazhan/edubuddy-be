@@ -1,26 +1,88 @@
 const express = require("express");
 const multer = require("multer");
-const { S3Client, PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
 const File = require("../models/File");
 const User = require("../models/User");
 const { Storage } = require("@google-cloud/storage");
-const path = require("path");
 const fileRouter = express.Router();
 const authMiddleware = require("../middleware/authMiddleware")
 
 // Configure DigitalOcean Spaces with AWS SDK v3
-const s3 = new S3Client({
-  endpoint: process.env.DO_SPACES_ENDPOINT, // e.g., "https://sgp1.digitaloceanspaces.com"
-  credentials: {
-    accessKeyId: process.env.DO_SPACES_KEY,
-    secretAccessKey: process.env.DO_SPACES_SECRET,
-  },
-  region: process.env.DO_SPACES_REGION,
+const googleStorage = new Storage({
+  keyFilename: process.env.GOOGLE_CLOUD_KEYFILE, // Path to your service account JSON
+  projectId: process.env.GOOGLE_CLOUD_PROJECT,  // Your Google Cloud Project ID
 });
+
+const bucket = googleStorage.bucket(process.env.GOOGLE_CLOUD_BUCKET);
 
 // Configure Multer for file uploads (without multer-s3)
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
+
+
+fileRouter.post("/upload", authMiddleware, upload.array("files", 5), async (req, res) => {
+  const userId = req.decodedJWT.id;
+  const userEmail = req.decodedJWT.email;
+  const tenantCode = req.tenantName;
+
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ message: "No files uploaded" });
+    }
+
+    const totalUploadSize = req.files.reduce((sum, file) => sum + file.size, 0);
+
+    // Fetch the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Check if the user has enough storage left
+    if (user.usedStorage + totalUploadSize > user.totalStorage) {
+      return res.status(400).json({ message: "Not enough storage space" });
+    }
+
+    const tag = Array.isArray(req.body.tag) ? req.body.tag[0] : req.body.tag;
+
+    const uploadedFiles = await Promise.all(
+      req.files.map(async (file) => {
+        const uniqueFileName = `${Date.now()}-${file.originalname}`;
+        // const filePath = `${tenantCode}/${userEmail}/${uniqueFileName}`;
+        const filePath = `${uniqueFileName}`;
+        const gcsFile = bucket.file(filePath);
+
+        // Upload file to Google Cloud Storage
+        await gcsFile.save(file.buffer, {
+          metadata: { contentType: file.mimetype },
+          //public: true, // Make file publicly accessible
+        });
+
+        const publicUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
+
+        return {
+          originalName: file.originalname,
+          storedName: filePath,
+          tag: tag,
+          url: publicUrl,
+          type: file.mimetype,
+          size: file.size,
+          tenantId: req.tenantId,
+          uploadedBy: userId,
+        };
+      })
+    );
+
+    await File.insertMany(uploadedFiles);
+
+    user.usedStorage += totalUploadSize;
+    await user.save();
+
+    res.status(201).json({ message: "Files uploaded successfully"});
+  } catch (error) {
+    res.status(500).json({ message: "Upload failed", error: error.message });
+  }
+});
+
 
 // Get files
 fileRouter.get("/", authMiddleware, async (req, res) => {
@@ -76,30 +138,41 @@ fileRouter.get("/", authMiddleware, async (req, res) => {
   }
 });
 
-// Delete file
-fileRouter.delete("/delete/:id", async (req, res) => {
+// Delete a single file
+fileRouter.delete("/delete/:id", authMiddleware, async (req, res) => {
+
+  let userId = req.decodedJWT.id;
+
   try {
     const file = await File.findById(req.params.id);
     if (!file) {
       return res.status(404).json({ message: "File not found" });
     }
 
-    const deleteParams = {
-      Bucket: process.env.DO_SPACES_BUCKET,
-      Key: file.storedName,
-    };
+    // Fetch user
+    const user = await User.findById(file.uploadedBy);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
 
-    await s3.send(new DeleteObjectCommand(deleteParams));
+    const gcsFile = bucket.file(file.storedName);
+    await gcsFile.delete();
 
+    // Delete file record
     await File.findByIdAndDelete(req.params.id);
+
+    // Update usedStorage
+    user.usedStorage = Math.max(user.usedStorage - file.size, 0);
+    await user.save();
+
     res.json({ message: "File deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: "Delete failed", error: error.message });
   }
 });
 
+// Delete multiple files
 fileRouter.post("/delete-multiple", authMiddleware, async (req, res) => {
-
   try {
     const { fileIds } = req.body;
 
@@ -109,24 +182,34 @@ fileRouter.post("/delete-multiple", authMiddleware, async (req, res) => {
 
     // Find all files to delete
     const filesToDelete = await File.find({ _id: { $in: fileIds } });
-
     if (!filesToDelete.length) {
       return res.status(404).json({ message: "Files not found" });
     }
 
-    // Delete files from DigitalOcean Spaces
-    const deletePromises = filesToDelete.map((file) => {
-      const deleteParams = {
-        Bucket: process.env.DO_SPACES_BUCKET,
-        Key: file.storedName,
-      };
-      return s3.send(new DeleteObjectCommand(deleteParams));
-    });
+    // Group files by user ID and calculate total size per user
+    const userStorageUpdates = filesToDelete.reduce((acc, file) => {
+      acc[file.uploadedBy] = (acc[file.uploadedBy] || 0) + file.size;
+      return acc;
+    }, {});
 
-    await Promise.all(deletePromises);
+    // Delete files from Google Cloud Storage in parallel
+    await Promise.all(filesToDelete.map((file) => bucket.file(file.storedName).delete()));
 
-    // Delete files from database
+    // Delete file records from the database
     await File.deleteMany({ _id: { $in: fileIds } });
+
+    // Prepare bulk update operations
+    const bulkOperations = Object.entries(userStorageUpdates).map(([userId, sizeToReduce]) => ({
+      updateOne: {
+        filter: { _id: userId },
+        update: { $inc: { usedStorage: -sizeToReduce } },
+      },
+    }));
+
+    // Perform a single bulk update for all users
+    if (bulkOperations.length > 0) {
+      await User.bulkWrite(bulkOperations);
+    }
 
     res.json({ message: "Files deleted successfully" });
   } catch (error) {
@@ -135,58 +218,5 @@ fileRouter.post("/delete-multiple", authMiddleware, async (req, res) => {
   }
 });
 
-const googleStorage = new Storage({
-  keyFilename: process.env.GOOGLE_CLOUD_KEYFILE, // Path to your service account JSON
-  projectId: process.env.GOOGLE_CLOUD_PROJECT,  // Your Google Cloud Project ID
-});
-
-const bucket = googleStorage.bucket(process.env.GOOGLE_CLOUD_BUCKET);
-
-fileRouter.post("/upload", authMiddleware, upload.array("files", 5), async (req, res) => {
-  const userId = req.decodedJWT.id;
-  const userEmail = req.decodedJWT.email;
-  const tenantId = req.tenantId;
-
-  try {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ message: "No files uploaded" });
-    }
-
-    const tag = Array.isArray(req.body.tag) ? req.body.tag[0] : req.body.tag;
-
-    const uploadedFiles = await Promise.all(
-      req.files.map(async (file) => {
-        const uniqueFileName = `${Date.now()}-${file.originalname}`;
-        const filePath = `${tenantId}/${userEmail}/${uniqueFileName}`;
-        const gcsFile = bucket.file(filePath);
-
-        // Upload file to Google Cloud Storage
-        await gcsFile.save(file.buffer, {
-          metadata: { contentType: file.mimetype },
-          //public: true, // Make file publicly accessible
-        });
-
-        const publicUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
-
-        return {
-          originalName: file.originalname,
-          storedName: filePath,
-          tag: tag,
-          url: publicUrl,
-          type: file.mimetype,
-          size: file.size,
-          tenantId: req.tenantId,
-          uploadedBy: userId,
-        };
-      })
-    );
-
-    await File.insertMany(uploadedFiles);
-
-    res.status(201).json({ message: "Files uploaded successfully", files: uploadedFiles });
-  } catch (error) {
-    res.status(500).json({ message: "Upload failed", error: error.message });
-  }
-});
 
 module.exports = fileRouter;

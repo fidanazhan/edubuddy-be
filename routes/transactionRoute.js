@@ -210,14 +210,3 @@ transactionRouter.get('/storage', async (req, res) => {
 // END STORAGE
 
 module.exports = transactionRouter;
-
-// // Delete Transaction by ID
-// transactionRouter.delete('/:id', async (req, res) => {
-//     try {
-//         const deletedTransaction = await Transaction.findByIdAndDelete(req.params.id);
-//         if (!deletedTransaction) return res.status(404).json({ error: 'Transaction not found' });
-//         res.json({ message: 'Transaction deleted successfully' });
-//     } catch (error) {
-//         res.status(500).json({ error: error.message });
-//     }
-// });

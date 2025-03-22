@@ -4,6 +4,7 @@ const User = require('../models/User.js');
 const UserChat = require("../models/UserChat.js");
 const authMiddleware = require("../middleware/authMiddleware")
 const gptTokenizer = require('gpt-tokenizer');
+const axios = require("axios");
 
 const chatRoute = express.Router();
 const {
@@ -16,11 +17,9 @@ const {
 chatRoute.post("/", authMiddleware, async (req, res) => {
   const userId = req.decodedJWT.id;
   const { text } = req.body;
-  console.log("1 Creating chat")
-  // console.log(req.body)
+
   try {
     // Create new chat
-    console.log("Inserting User Question")
     const newChat = new Chat({
       userId: userId,
       history: [{ role: "user", parts: [{ text }] }],
@@ -70,7 +69,6 @@ chatRoute.post("/", authMiddleware, async (req, res) => {
 chatRoute.put("/:id/title", authMiddleware, async (req, res) => {
   const userId = req.decodedJWT.id;
   const { title } = req.body;
-  console.log("6 update chat title")
   // console.log(req.body)
   try {
     await UserChat.updateOne(
@@ -88,7 +86,6 @@ chatRoute.put("/:id/title", authMiddleware, async (req, res) => {
 
 chatRoute.get("/userchats", authMiddleware, async (req, res) => {
   const userId = req.decodedJWT.id;
-  console.log("3 Getting user's chats")
   try {
     const userChats = await UserChat.findOne({ userId });
 
@@ -106,7 +103,6 @@ chatRoute.get("/userchats", authMiddleware, async (req, res) => {
 
 chatRoute.get("/:id", authMiddleware, async (req, res) => {
   const userId = req.decodedJWT.id;
-  console.log("2 Get the chat based on id")
   try {
     const chat = await Chat.findOne({ _id: req.params.id, userId });
     if (!chat) return res.status(404).send({ error: "Chat did not exist" });
@@ -187,11 +183,103 @@ const model_chat_answer = async (data, modelChosen, text, imgai, res) => {
   }
 };
 
+
+// GEMINI ASAL
+// chatRoute.put("/:id", authMiddleware, async (req, res) => {
+//   const userId = req.decodedJWT.id;
+//   const { imgdb, imgai } = req.body;
+//   const question = req.body.question
+//   try {
+//     if (!question) {
+//       return res.status(400).send("Question is required!");
+//     }
+
+//     const chat = await Chat.findOne({ _id: req.params.id, userId });
+
+//     if (!chat) {
+//       return res.status(404).send("Chat not found!");
+//     }
+
+//     // **Estimate tokens for the user message**
+//     const userMessageTokens = gptTokenizer.encode(question).length;
+
+//     // Save the user message first
+//     const userMessage = {
+//       role: "user",
+//       parts: [{ text: question }],
+//       ...(imgdb && { imgdb }),
+//       tokens: userMessageTokens, // Store tokens
+//     };
+
+//     if (chat.history.length > 1) {
+//       console.log("Inserting User Question 2")
+//       await Chat.updateOne(
+//         { _id: req.params.id, userId },
+//         { $push: { history: userMessage } }
+//       );
+//     }
+
+//     // Capture the AI response
+//     let modelResponseText = "";
+//     let modelTokens = ""
+//     try {
+//       const result = await model_chat_answer(chat, "gemini-2.0-flash", question, imgai, res);
+//       modelResponseText = result.response;
+//       modelTokens = result.outputTokens;
+//     } catch (error) {
+//       console.error("Error calling model_chat_answer:", error);
+//       if (!res.headersSent) {
+//         return res.status(500).send("Error processing AI response");
+//       }
+//       return;
+//     }
+//     if (!modelResponseText || typeof modelResponseText !== "string") {
+//       console.warn("AI response is missing or invalid:", modelResponseText);
+//       modelResponseText = "No response from AI";
+//     }
+
+//     // Save the AI response
+//     const modelMessage = {
+//       role: "model",
+//       parts: [{ text: modelResponseText }],
+//       tokens: modelTokens, // Store AI token count
+//     };
+    
+//     await Chat.updateOne(
+//       { _id: req.params.id, userId },
+//       { $push: { history: modelMessage } }
+//     );
+//     // console.log("AI response saved:", modelMessage);
+
+//     await UserChat.updateOne(
+//       { userId, "chats._id": req.params.id },
+//       { $set: { "chats.$.updatedAt": new Date() } }
+//     );
+
+//     // **Calculate total tokens used**
+//     let totalToken = modelTokens + userMessageTokens;
+
+//     // **Update User's totalToken (subtract used tokens)**
+//     await User.updateOne(
+//       { _id: userId },
+//       { $inc: { usedToken: totalToken } } // Subtract totalToken from user.totalToken
+//     );
+
+//   } catch (err) {
+//     console.error("Unexpected error:", err);
+//     if (!res.headersSent) {
+//       res.status(500).send("Error updating chat!");
+//     }
+//   }
+// });
+
+
+// AWANTEC CHATBOT
 chatRoute.put("/:id", authMiddleware, async (req, res) => {
   const userId = req.decodedJWT.id;
   const { imgdb, imgai } = req.body;
-  const question = req.body.question
-  console.log("question : " + question)
+  const question = req.body.question;
+
   try {
     if (!question) {
       return res.status(400).send("Question is required!");
@@ -205,7 +293,6 @@ chatRoute.put("/:id", authMiddleware, async (req, res) => {
 
     // **Estimate tokens for the user message**
     const userMessageTokens = gptTokenizer.encode(question).length;
-    console.log("userMessageTokens: " + userMessageTokens)
 
     // Save the user message first
     const userMessage = {
@@ -216,30 +303,32 @@ chatRoute.put("/:id", authMiddleware, async (req, res) => {
     };
 
     if (chat.history.length > 1) {
-      console.log("Inserting User Question 2")
+      console.log("Inserting User Question 2");
       await Chat.updateOne(
         { _id: req.params.id, userId },
         { $push: { history: userMessage } }
       );
     }
 
-    // Capture the AI response
+    // **Call the custom chat API**
     let modelResponseText = "";
-    let modelTokens = ""
+    let modelTokens = 0;
+
     try {
-      const result = await model_chat_answer(chat, "gemini-2.0-flash", question, imgai, res);
-      modelResponseText = result.response;
-      modelTokens = result.outputTokens;
+      const response = await axios.post(
+        process.env.AWANTEC_CHATBOT_URL,
+        { user_query: question }
+      );
+
+      // Extract the rag_response from the response
+      modelResponseText = response.data.rag_response || "No response from AI";
+      modelTokens = response.data.outputTokens || 0;
     } catch (error) {
-      console.error("Error calling model_chat_answer:", error);
+      console.error("Error calling custom chat API:", error);
       if (!res.headersSent) {
         return res.status(500).send("Error processing AI response");
       }
       return;
-    }
-    if (!modelResponseText || typeof modelResponseText !== "string") {
-      console.warn("AI response is missing or invalid:", modelResponseText);
-      modelResponseText = "No response from AI";
     }
 
     // Save the AI response
@@ -248,12 +337,11 @@ chatRoute.put("/:id", authMiddleware, async (req, res) => {
       parts: [{ text: modelResponseText }],
       tokens: modelTokens, // Store AI token count
     };
-    
+
     await Chat.updateOne(
       { _id: req.params.id, userId },
       { $push: { history: modelMessage } }
     );
-    // console.log("AI response saved:", modelMessage);
 
     await UserChat.updateOne(
       { userId, "chats._id": req.params.id },
@@ -266,8 +354,11 @@ chatRoute.put("/:id", authMiddleware, async (req, res) => {
     // **Update User's totalToken (subtract used tokens)**
     await User.updateOne(
       { _id: userId },
-      { $inc: { totalToken: -totalToken } } // Subtract totalToken from user.totalToken
+      { $inc: { usedToken: totalToken } } // Subtract totalToken from user.totalToken
     );
+
+    // **Send the rag_response to frontend**
+    res.json({ response: modelResponseText });
 
   } catch (err) {
     console.error("Unexpected error:", err);
@@ -276,6 +367,7 @@ chatRoute.put("/:id", authMiddleware, async (req, res) => {
     }
   }
 });
+
 
 chatRoute.delete("/:id", authMiddleware, async (req, res) => {
   const userId = req.decodedJWT.id;

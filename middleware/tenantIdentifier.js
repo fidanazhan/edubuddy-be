@@ -21,7 +21,8 @@ const tenantIdentifier = async (req, res, next) => {
       return res.status(404).json({ error: 'Tenant not found.' });
     }
 
-    req.tenantId = tenant._id;  
+    req.tenantId = tenant._id; 
+    req.tenantCode = tenant.code; 
     // req.tenantInfo = tenant; // return tenant object
     // console.log("Req TenantId: " + req.tenantId)   
 

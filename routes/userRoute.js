@@ -1,21 +1,25 @@
 const express = require('express');
 const userRouter = express.Router();
 const User = require('../models/User');
-const Tenant = require('../models/Tenant')
 const Role = require('../models/Role')
 const Group = require('../models/Group')
 const GroupUser = require('../models/GroupUser')
+const StorageTransaction = require('../models/StorageTransaction')
 const mongoose = require("mongoose");
 const multer = require("multer");
 const ExcelJS = require("exceljs");
 const authMiddleware = require('../middleware/authMiddleware');
+const Transaction = require('../models/Transaction');
+const { parseStorage } = require('../utils/storageUtils'); 
 
 const upload = multer({ storage: multer.memoryStorage() });
+
 // Create User
 userRouter.post('/', authMiddleware, async (req, res) => {
 
-    const { name, email, role, status, groups } = req.body;
-    const createdBy = req.user.name;
+    const { name, email, groups, idNumber } = req.body;
+    let createdBy = req.decodedJWT.name;
+    let createdById = req.decodedJWT.id;
     // const session = await mongoose.startSession();
     // session.startTransaction();
 
@@ -37,21 +41,30 @@ userRouter.post('/', authMiddleware, async (req, res) => {
             return res.status(400).json({ message: 'One or more group codes are invalid.' });
         }
 
+        // Convert storage to bytes
+        const defaultStorageInBytes = parseStorage(role.defaultStorage);
+
         const groupIds = groupsDB.map(g => g._id);
 
         // Create the user with the role
         const user = new User({
             ...req.body,
+            name: name,
+            email: email,
             tenantId: tenantId,
+            ICNumber: idNumber,
             groups: groupIds,
             role: role._id, // Assuming you want to store the role reference in the User model
             createdBy: createdBy,
             modifiedBy: createdBy,
             totalToken: role.defaultToken,
-            totalStorage: role.defaultStorage
+            totalStorage: defaultStorageInBytes
         });
 
         const savedUser = await user.save();
+
+        // ---------------------------------- GROUP USER PART ----------------------------------
+        // Save user into GroupUser Table
 
         // Add entries to GroupUser
         const groupUserEntries = groupIds.map(groupId => ({
@@ -63,6 +76,81 @@ userRouter.post('/', authMiddleware, async (req, res) => {
         // await GroupUser.insertMany(groupUserEntries, { session });
         await GroupUser.insertMany(groupUserEntries);
 
+        // ---------------------------------- UPDATE ADMIN PART ----------------------------------
+        // Update admin balance token and storage after create user.
+
+        // Update admin total token and token distributed. 
+        let adminUser = await User.findById(createdById);
+        if (!adminUser) {
+            return res.status(404).json({ message: "Admin user not found" });
+        }
+
+        // Check if the admin has enough tokens and storage before distribution
+        if (adminUser.totalToken < role.defaultToken) {
+            return res.status(404).json({ message: "Insufficient tokens to distribute."});
+        }
+
+        if (adminUser.totalStorage < defaultStorageInBytes) {
+            return res.status(404).json({ message: "Insufficient storage to distribute."});
+        }
+
+        // If checks pass, proceed with the update
+        adminUser.totalToken -= role.defaultToken;
+        adminUser.distributedToken += role.defaultToken;
+        adminUser.totalStorage -= defaultStorageInBytes;
+        adminUser.distributedStorage += defaultStorageInBytes;
+
+        await adminUser.save();
+
+        // Record the transaction in storageTransactionHistory
+        const storageTransaction = new StorageTransaction({
+            tenantId: adminUser.tenantId,
+            sender: {
+                senderId: adminUser._id,
+                senderName: adminUser.name,
+            },
+            receiver: {
+                receiverId: savedUser._id,
+                receiverName: savedUser.name,
+            },
+            amount: defaultStorageInBytes, // Storage amount transferred
+            senderToken: {
+                before: adminUser.totalToken + defaultStorageInBytes, // Before deduction
+                after: adminUser.totalToken, // After deduction
+            },
+            receiverToken: {
+                before: savedUser.totalToken, // Before addition
+                after: savedUser.totalToken + defaultStorageInBytes, // After addition
+            },
+        });
+
+        await storageTransaction.save();
+
+
+        // Token Transaction History
+        const tokenTransaction = new Transaction({
+            tenantId: adminUser.tenantId,
+            sender: {
+                senderId: adminUser._id,
+                senderName: adminUser.name,
+            },
+            receiver: {
+                receiverId: savedUser._id,
+                receiverName: savedUser.name,
+            },
+            amount: role.defaultToken, // Storage amount transferred
+            senderToken: {
+                before: adminUser.totalToken + role.defaultToken, // Before deduction
+                after: adminUser.totalToken, // After deduction
+            },
+            receiverToken: {
+                before: savedUser.totalToken, // Before addition
+                after: savedUser.totalToken + role.defaultToken, // After addition
+            },
+        });
+
+        await tokenTransaction.save();
+
         // await session.commitTransaction();
         // session.endSession();
 
@@ -73,10 +161,6 @@ userRouter.post('/', authMiddleware, async (req, res) => {
 
         if (error.code === 11000) {
             return res.status(400).json({ error: 'This email is already in use. Please choose a different email address.' });
-        }
-
-        if (error.name === 'ValidationError') {
-            return res.status(400).json({ error: 'Name field is missing or invalid' });
         }
 
         if (error instanceof mongoose.Error.CastError) {
@@ -290,7 +374,7 @@ userRouter.get('/:id', async (req, res) => {
 userRouter.put('/:id', authMiddleware, async (req, res) => {
 
     const { name, email, role, status, groups } = req.body;
-    const modifiedBy = req.user.name;
+    const modifiedBy = req.decodedJWT.name;
     // const session = await mongoose.startSession();
     // session.startTransaction();
 
@@ -349,6 +433,11 @@ userRouter.put('/:id', authMiddleware, async (req, res) => {
         existingUser.status = req.body.status || existingUser.status;
         existingUser.groups = newGroupIds;
         existingUser.modifiedBy = modifiedBy;
+
+        if(existingUser.ICNumber == "" || existingUser.ICNumber == null){
+            existingUser.ICNumber = req.body.idNumber
+        }
+
         await existingUser.save();
 
         // await session.commitTransaction();
@@ -432,7 +521,7 @@ userRouter.delete('/:id', async (req, res) => {
 
 // Bulk Add Upload By Excel
 userRouter.post("/bulk-add", authMiddleware, upload.single("file"), async (req, res) => {
-    const createdBy = req.user.name;
+    const createdBy = req.decodedJWT.name;
 
     if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
@@ -494,6 +583,8 @@ userRouter.post("/bulk-add", authMiddleware, upload.single("file"), async (req, 
                 return res.status(400).json({ error: `Row ${i}: Status '${rawStatus}'. Invalid Status value. Use 'Active' or 'Not Active'.` });
             }
 
+            const defaultStorageInBytes = parseStorage(role.defaultStorage);
+
             // Prepare user data
             usersToInsert.push({
                 name,
@@ -504,7 +595,7 @@ userRouter.post("/bulk-add", authMiddleware, upload.single("file"), async (req, 
                 createdBy,
                 modifiedBy: createdBy,
                 totalToken: role.defaultToken,
-                totalStorage: role.defaultStorage
+                totalStorage: defaultStorageInBytes
             });
         }
 
